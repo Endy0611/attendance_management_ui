@@ -16,7 +16,7 @@
  * so this never gets redirected — it always returns JSON/binary.
  *
  * Versioning: NEXT_PUBLIC_API_URL already includes the API version
- * (e.g. https://instantcheck.online/api/v1), and lib/api.ts also calls
+ * (e.g. https://example.com/api/v1), and lib/api.ts also calls
  * this proxy with /api/v1/... in the path. To avoid double-prefixing
  * (/api/v1/api/v1/courses), we strip a leading /api/vN segment from
  * the incoming proxy path before appending it to BACKEND_URL. Bumping

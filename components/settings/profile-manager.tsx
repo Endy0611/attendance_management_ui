@@ -94,7 +94,7 @@ export function ProfileManager({ initialUser }: { initialUser: AppUserResponse }
         if (avatarValue.startsWith("http")) {
           const urlObj = new URL(avatarValue)
           const keyParam = urlObj.searchParams.get("key")
-          if (keyParam) return `https://instantcheck.online/api/v1/files/preview-file?key=${keyParam}`
+          if (keyParam) return `${process.env.NEXT_PUBLIC_API_URL}/files/preview-file?key=${keyParam}`
         }
       } catch {
         // fall through to the generic cases below
@@ -105,7 +105,7 @@ export function ProfileManager({ initialUser }: { initialUser: AppUserResponse }
       return avatarValue
     }
 
-    return `https://instantcheck.online/api/v1/files/preview-file?key=${avatarValue}`
+    return `${process.env.NEXT_PUBLIC_API_URL}/files/preview-file?key=${avatarValue}`
   }
 
   // Handle local file picking -> Trigger Cropping Modal UI

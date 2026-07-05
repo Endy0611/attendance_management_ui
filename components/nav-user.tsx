@@ -35,7 +35,7 @@ const getDisplayAvatar = (avatarValue: string) => {
   if (avatarValue.startsWith("http://") || avatarValue.startsWith("https://")) {
     return avatarValue;
   }
-  return `https://instantcheck.online/api/v1/files/preview-file?key=${avatarValue}`;
+  return `${process.env.NEXT_PUBLIC_API_URL}/files/preview-file?key=${avatarValue}`;
 };
 
 export function NavUser({
