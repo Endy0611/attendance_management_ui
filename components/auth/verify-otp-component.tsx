@@ -19,6 +19,7 @@
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { verifyOtpAction, resendOtpAction } from "@/actions/auth.action";
+import { toastSuccess, toastError } from "@/lib/toast";
 
 export default function VerifyOtpComponent() {
   const router = useRouter();
@@ -41,7 +42,9 @@ export default function VerifyOtpComponent() {
 
     if (!result.ok) {
       setError(result.error);
+      toastError(result.error);
     } else {
+      toastSuccess("Email verified", "You can now sign in.");
       // Redirect to login with success hint
       router.push("/login?verified=1");
     }
@@ -55,7 +58,12 @@ export default function VerifyOtpComponent() {
 
     const result = await resendOtpAction(email);
     setInfo(result.ok ? "A new code was sent to your email." : "");
-    if (!result.ok) setError(result.error);
+    if (!result.ok) {
+      setError(result.error);
+      toastError(result.error);
+    } else {
+      toastSuccess("Code resent", "Check your email.");
+    }
   }
 
   return (

@@ -13,6 +13,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { registerAction } from "@/actions/auth.action";
+import { toastSuccess, toastError } from "@/lib/toast";
 
 export default function RegisterComponent() {
   const router = useRouter();
@@ -29,6 +30,7 @@ export default function RegisterComponent() {
     // Quick client-side password match check (no need to hit server)
     if (formData.get("password") !== formData.get("confirmPassword")) {
       setError("Passwords do not match");
+      toastError("Passwords do not match");
       setLoading(false);
       return;
     }
@@ -37,10 +39,12 @@ export default function RegisterComponent() {
 
     if (!result.ok) {
       setError(result.error);
+      toastError(result.error);
       setLoading(false);
       return;
     }
 
+    toastSuccess("Account created", "Check your email for a verification code.");
     // Pass email to OTP page via query param
     router.push(`/verify-otp?email=${encodeURIComponent(result.data.email)}`);
   }

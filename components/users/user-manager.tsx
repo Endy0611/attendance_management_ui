@@ -6,6 +6,7 @@ import {
   setUserActiveAction, resetUserPasswordAction, resetUserDeviceAction,
 } from "@/actions/admin.action"
 import { faceApi } from "@/lib/api"
+import { toastSuccess, toastError } from "@/lib/toast"
 import type { AppUserResponse } from "@/types/auth-types"
 import {
   PlusIcon, PencilIcon, TrashIcon, ShieldOffIcon, ShieldCheckIcon,
@@ -123,7 +124,6 @@ export function UserManager({
   const [search,  setSearch]  = useState("")
   const [modal,   setModal]   = useState<"create" | AppUserResponse | null>(null)
   const [confirm, setConfirm] = useState<{ message: string; action: () => Promise<{ ok: boolean; error?: string }> } | null>(null)
-  const [toast,   setToast]   = useState("")
   const [isRefreshing, startRefresh] = useTransition()
 
   function refresh() {
@@ -133,11 +133,6 @@ export function UserManager({
     })
   }
 
-  function showToast(msg: string) {
-    setToast(msg)
-    setTimeout(() => setToast(""), 3000)
-  }
-
   function runConfirm(message: string, action: () => Promise<{ ok: boolean; error?: string }>) {
     setConfirm({ message, action })
   }
@@ -145,8 +140,12 @@ export function UserManager({
   async function executeConfirm() {
     if (!confirm) return
     const result = await confirm.action()
-    showToast(result.ok ? "Done" : (result.error ?? "Something went wrong"))
-    if (result.ok) refresh()
+    if (result.ok) {
+      toastSuccess("Done")
+      refresh()
+    } else {
+      toastError(result.error ?? "Something went wrong")
+    }
     setConfirm(null)
   }
 
@@ -263,7 +262,7 @@ export function UserManager({
         <UserModal
           user={modal === "create" ? null : modal}
           onClose={() => setModal(null)}
-          onSaved={() => { setModal(null); refresh(); showToast(modal === "create" ? "User created" : "User updated") }}
+          onSaved={() => { setModal(null); refresh(); toastSuccess(modal === "create" ? "User created" : "User updated") }}
         />
       )}
       {confirm && (
@@ -272,13 +271,6 @@ export function UserManager({
           onConfirm={executeConfirm}
           onCancel={() => setConfirm(null)}
         />
-      )}
-
-      {/* Toast */}
-      {toast && (
-        <div className="fixed bottom-4 right-4 z-50 bg-foreground text-background text-sm px-4 py-2 rounded-lg shadow-lg">
-          {toast}
-        </div>
       )}
     </>
   )

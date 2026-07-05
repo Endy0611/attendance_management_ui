@@ -4,6 +4,7 @@ import { useState, useTransition } from "react"
 import { getZonesAction, deleteZoneAction } from "@/actions/zone.action"
 import { ZoneFormDialog } from "@/components/zones/zone-form-dialog"
 import type { ZoneResponse } from "@/types/zone-types"
+import { toastSuccess, toastError } from "@/lib/toast"
 import { PlusIcon, PencilIcon, TrashIcon, LoaderIcon, SearchIcon, MapPinIcon } from "lucide-react"
 
 export function ZoneManager({ initialZones }: { initialZones: ZoneResponse[] }) {
@@ -11,13 +12,7 @@ export function ZoneManager({ initialZones }: { initialZones: ZoneResponse[] }) 
   const [search, setSearch] = useState("")
   const [dialog, setDialog] = useState<ZoneResponse | "create" | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
-  const [toast, setToast] = useState("")
   const [isRefreshing, startRefresh] = useTransition()
-
-  function showToast(msg: string) {
-    setToast(msg)
-    setTimeout(() => setToast(""), 3000)
-  }
 
   function refresh() {
     startRefresh(async () => {
@@ -33,10 +28,10 @@ export function ZoneManager({ initialZones }: { initialZones: ZoneResponse[] }) 
     setDeletingId(null)
 
     if (!result.ok) {
-      showToast(result.error)
+      toastError(result.error)
       return
     }
-    showToast("Zone deleted")
+    toastSuccess("Zone deleted")
     refresh()
   }
 
@@ -144,17 +139,11 @@ export function ZoneManager({ initialZones }: { initialZones: ZoneResponse[] }) 
           zone={dialog === "create" ? null : dialog}
           onClose={() => setDialog(null)}
           onSaved={() => {
-            showToast(dialog === "create" ? "Zone created" : "Zone updated")
+            toastSuccess(dialog === "create" ? "Zone created" : "Zone updated")
             setDialog(null)
             refresh()
           }}
         />
-      )}
-
-      {toast && (
-        <div className="fixed bottom-4 right-4 z-50 bg-foreground text-background text-sm px-4 py-2 rounded-lg shadow-lg">
-          {toast}
-        </div>
       )}
     </div>
   )

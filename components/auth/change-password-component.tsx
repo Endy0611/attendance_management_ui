@@ -19,6 +19,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { changePasswordServerAction } from "@/actions/auth-server.action";
+import { toastSuccess, toastError } from "@/lib/toast";
 
 type State = "idle" | "loading" | "success";
 
@@ -37,6 +38,7 @@ export default function ChangePasswordComponent() {
     // Client-side confirm check (fast feedback, no round trip)
     if (newPassword !== confirmPassword) {
       setError("New passwords do not match");
+      toastError("New passwords do not match");
       return;
     }
 
@@ -47,10 +49,12 @@ export default function ChangePasswordComponent() {
 
     if (!result.ok) {
       setError(result.error);
+      toastError(result.error);
       setState("idle");
       return;
     }
 
+    toastSuccess("Password changed");
     setState("success");
   }
 

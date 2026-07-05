@@ -16,7 +16,11 @@ import type {
   AppUserResponse,
 } from "@/types/auth-types";
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+// Was defaulting to a bare host with no /api/v1 — every other *.service.ts
+// file (course/zone/major/session/device/face/attendance) defaults with the
+// version prefix. Left inconsistent, this 404s admin.service.ts calls
+// whenever NEXT_PUBLIC_API_URL isn't set (e.g. local dev with no .env yet).
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080/api/v1";
 
 async function request<T>(
   path: string,
@@ -97,7 +101,7 @@ export const adminService = {
   resetPassword: (id: string, token: string) =>
     request<void>(`/admin/users/${id}/reset-password`, token, { method: "POST" }),
 
-  /** POST /admin/users/{id}/device-reset */
+  /** PATCH /admin/users/{id}/device-reset */
   resetDevice: (id: string, token: string) =>
-    request<void>(`/admin/users/${id}/device-reset`, token, { method: "POST" }),
+    request<void>(`/admin/users/${id}/device-reset`, token, { method: "PATCH" }),
 };

@@ -1,9 +1,10 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { createGroupAction, updateGroupAction, getCourseOptionsAction, getInstructorOptionsAction } from "@/actions/group.action"
+import { createGroupAction, updateGroupAction, getCourseOptionsAction, getInstructorOptionsAction, getMajorOptionsAction } from "@/actions/group.action"
 import type { GroupResponse } from "@/types/group-types"
 import type { CourseResponse } from "@/types/course-types"
+import type { MajorResponse } from "@/types/major-types"
 import type { AppUserResponse } from "@/types/auth-types"
 import { LoaderIcon, XIcon } from "lucide-react"
 
@@ -16,6 +17,7 @@ interface GroupFormDialogProps {
 export function GroupFormDialog({ group, onClose, onSaved }: GroupFormDialogProps) {
   const [courses, setCourses] = useState<CourseResponse[]>([])
   const [instructors, setInstructors] = useState<AppUserResponse[]>([])
+  const [majors, setMajors] = useState<MajorResponse[]>([])
   const [loadingOptions, setLoadingOptions] = useState(true)
 
   const [courseId, setCourseId] = useState(group?.courseId ?? "")
@@ -23,14 +25,17 @@ export function GroupFormDialog({ group, onClose, onSaved }: GroupFormDialogProp
   const [instructorId, setInstructorId] = useState(group?.instructorId ?? "")
   const [capacity, setCapacity] = useState(group?.capacity ?? 30)
   const [semester, setSemester] = useState(group?.semester ?? "")
+  const [majorId, setMajorId] = useState(group?.majorId ?? "")
+  const [shift, setShift] = useState(group?.shift ?? "")
 
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
 
   useEffect(() => {
-    Promise.all([getCourseOptionsAction(), getInstructorOptionsAction()]).then(([c, i]) => {
+    Promise.all([getCourseOptionsAction(), getInstructorOptionsAction(), getMajorOptionsAction()]).then(([c, i, m]) => {
       if (c.ok) setCourses(c.data)
       if (i.ok) setInstructors(i.data)
+      if (m.ok) setMajors(m.data)
       setLoadingOptions(false)
     })
   }, [])
@@ -39,7 +44,12 @@ export function GroupFormDialog({ group, onClose, onSaved }: GroupFormDialogProp
     setSaving(true)
     setError("")
 
-    const input = { courseId, name, instructorId, capacity: Number(capacity), semester: semester || undefined }
+    const input = {
+      courseId, name, instructorId, capacity: Number(capacity),
+      semester: semester || undefined,
+      majorId: majorId || undefined,
+      shift: shift || undefined,
+    }
     const result = group ? await updateGroupAction(group.id, input) : await createGroupAction(input)
 
     setSaving(false)
@@ -130,6 +140,31 @@ export function GroupFormDialog({ group, onClose, onSaved }: GroupFormDialogProp
                   placeholder="e.g. Fall 2026"
                   value={semester}
                   onChange={(e) => setSemester(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Major</label>
+                <select
+                  className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#1C4D8D]/30"
+                  value={majorId}
+                  onChange={(e) => setMajorId(e.target.value)}
+                >
+                  <option value="">None</option>
+                  {majors.map((m) => (
+                    <option key={m.id} value={m.id}>{m.code} — {m.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Shift</label>
+                <input
+                  className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#1C4D8D]/30"
+                  placeholder="e.g. Evening"
+                  value={shift}
+                  onChange={(e) => setShift(e.target.value)}
                 />
               </div>
             </div>

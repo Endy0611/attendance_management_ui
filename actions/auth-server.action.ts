@@ -1,35 +1,25 @@
-/**
- * actions/auth-server.action.ts
- *
- * These are the server actions that handle COOKIE management.
- * Separate from auth.action.ts because cookie writing needs
- * to happen in server actions (not in the plain service layer).
- *
- * Flow:
- *   Component calls loginServerAction
- *   → validates with Zod
- *   → calls authService.login
- *   → sets HttpOnly cookies via setAuthCookies
- *   → returns user data to client (client updates Zustand store)
- */
-
 "use server";
 
 import { z } from "zod";
 import { redirect } from "next/navigation";
 import { authService } from "@/service/auth.service";
 import { setAuthCookies, clearAuthCookies, getTokens } from "@/lib/server-auth";
+import { ApiError, toFriendlyMessage } from "@/lib/api-error";
 import type { AppUserResponse } from "@/types/auth-types";
 
 type ActionResult<T = undefined> =
   | { ok: true; data: T }
   | { ok: false; error: string };
 
+function isExpiredToken(err: unknown): boolean {
+  return err instanceof ApiError && (err.status === 401 || err.status === 500);
+}
+
 // ─── Login ────────────────────────────────────────────────────────────────────
 
 const loginSchema = z.object({
-  identifier: z.string().min(1, "Required"),
-  password: z.string().min(1, "Required"),
+  identifier: z.string().min(1, "Please enter your email or student ID"),
+  password: z.string().min(1, "Please enter your password"),
   rememberMe: z.boolean().optional(),
 });
 
@@ -47,19 +37,15 @@ export async function loginServerAction(
   }
 
   try {
-    // 1. Get tokens from backend
     const auth = await authService.login(parsed.data);
-
-    // 2. Write HttpOnly cookies (server-side, JS can't read these)
     await setAuthCookies(auth.accessToken, auth.refreshToken, parsed.data.rememberMe);
-
-    // 3. Fetch user profile
     const user = await authService.getMe(auth.accessToken);
-
-    // Return user to client so Zustand store can be updated
     return { ok: true, data: user };
-  } catch (e) {
-    return { ok: false, error: (e as Error).message };
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 401) {
+      return { ok: false, error: "Incorrect email/student ID or password" };
+    }
+    return { ok: false, error: toFriendlyMessage(err) };
   }
 }
 
@@ -67,52 +53,39 @@ export async function loginServerAction(
 
 export async function logoutServerAction(): Promise<void> {
   const { refreshToken } = await getTokens();
-
-  // Tell backend to invalidate the refresh token (best effort)
   if (refreshToken) {
     try {
       await authService.logout({ refreshToken });
-    } catch {
-      // Ignore — we still clear cookies even if backend fails
-    }
+    } catch {}
   }
-
   await clearAuthCookies();
   redirect("/login");
 }
 
 // ─── Refresh token ────────────────────────────────────────────────────────────
 
-/**
- * Called when an API request returns 401.
- * Tries to get a new access token using the refresh token.
- * Returns new accessToken or null if refresh also fails (user must re-login).
- */
 export async function refreshTokenServerAction(): Promise<
   ActionResult<{ accessToken: string }>
 > {
   const { refreshToken } = await getTokens();
-
   if (!refreshToken) {
-    return { ok: false, error: "No refresh token" };
+    return { ok: false, error: "Your session has expired. Please sign in again." };
   }
-
   try {
     const auth = await authService.refresh({ refreshToken });
     await setAuthCookies(auth.accessToken, auth.refreshToken);
     return { ok: true, data: { accessToken: auth.accessToken } };
-  } catch (e) {
-    // Refresh failed — clear cookies and force re-login
+  } catch {
     await clearAuthCookies();
-    return { ok: false, error: (e as Error).message };
+    return { ok: false, error: "Your session has expired. Please sign in again." };
   }
 }
 
 // ─── Change password ──────────────────────────────────────────────────────────
 
 const changePasswordSchema = z.object({
-  currentPassword: z.string().min(1, "Current password is required"),
-  newPassword: z.string().min(8, "At least 8 characters"),
+  currentPassword: z.string().min(1, "Please enter your current password"),
+  newPassword: z.string().min(8, "New password must be at least 8 characters"),
 });
 
 export async function changePasswordServerAction(
@@ -127,14 +100,26 @@ export async function changePasswordServerAction(
     return { ok: false, error: parsed.error.issues[0].message };
   }
 
-  const { accessToken } = await getTokens();
-  if (!accessToken) return { ok: false, error: "Not authenticated" };
+  const { accessToken, refreshToken } = await getTokens();
+  if (!accessToken) {
+    return { ok: false, error: "Your session has expired. Please sign in again." };
+  }
 
   try {
     await authService.changePassword(parsed.data, accessToken);
     return { ok: true, data: undefined };
-  } catch (e) {
-    return { ok: false, error: (e as Error).message };
+  } catch (err) {
+    if (!isExpiredToken(err) || !refreshToken) {
+      return { ok: false, error: toFriendlyMessage(err) };
+    }
+    try {
+      const auth = await authService.refresh({ refreshToken });
+      await setAuthCookies(auth.accessToken, auth.refreshToken);
+      await authService.changePassword(parsed.data, auth.accessToken);
+      return { ok: true, data: undefined };
+    } catch (retryErr) {
+      return { ok: false, error: toFriendlyMessage(retryErr) };
+    }
   }
 }
 
@@ -144,22 +129,60 @@ export async function updateProfileServerAction(
   formData: FormData
 ): Promise<ActionResult<AppUserResponse>> {
   const name = formData.get("name") as string;
-  if (!name?.trim()) return { ok: false, error: "Name is required" };
+  if (!name?.trim()) return { ok: false, error: "Please enter your name" };
 
-  const { accessToken } = await getTokens();
-  if (!accessToken) return { ok: false, error: "Not authenticated" };
+  const rawPhone = formData.get("phone") as string;
+  const rawAvatar = formData.get("avatar") as string;
+
+  // 1. Clean phone input formatting
+  let sanitizedPhone = rawPhone ? rawPhone.replace(/\s+/g, "") : "";
+  if (sanitizedPhone.startsWith("0")) {
+    sanitizedPhone = sanitizedPhone.slice(1);
+  }
+
+  // 2. Extract key from image preview link paths
+  let sanitizedAvatar = rawAvatar?.trim() || "";
+  if (sanitizedAvatar.includes("key=")) {
+    try {
+      if (sanitizedAvatar.startsWith("http")) {
+        const urlObj = new URL(sanitizedAvatar);
+        const keyParam = urlObj.searchParams.get("key");
+        if (keyParam) sanitizedAvatar = keyParam;
+      } else {
+        const matches = sanitizedAvatar.match(/key=([^&]+)/);
+        if (matches && matches[1]) sanitizedAvatar = matches[1];
+      }
+    } catch (e) {}
+  }
+
+  // 3. Assemble explicit string properties to strictly fulfill model bindings
+  const payload = {
+    name: name.trim(),
+    phone: sanitizedPhone.trim() !== "" ? sanitizedPhone.trim() : "",
+    avatar: sanitizedAvatar.trim() !== "" ? sanitizedAvatar.trim() : ""
+  };
+
+  console.log("[updateProfileServerAction] Target payload:", JSON.stringify(payload));
+
+  const { accessToken, refreshToken } = await getTokens();
+  if (!accessToken) {
+    return { ok: false, error: "Your session has expired. Please sign in again." };
+  }
 
   try {
-    const user = await authService.updateMe(
-      {
-        name,
-        phone: (formData.get("phone") as string) || undefined,
-        avatar: (formData.get("avatar") as string) || undefined,
-      },
-      accessToken
-    );
+    const user = await authService.updateMe(payload as any, accessToken);
     return { ok: true, data: user };
-  } catch (e) {
-    return { ok: false, error: (e as Error).message };
+  } catch (err) {
+    if (!isExpiredToken(err) || !refreshToken) {
+      return { ok: false, error: toFriendlyMessage(err) };
+    }
+    try {
+      const auth = await authService.refresh({ refreshToken });
+      await setAuthCookies(auth.accessToken, auth.refreshToken);
+      const user = await authService.updateMe(payload as any, auth.accessToken);
+      return { ok: true, data: user };
+    } catch (retryErr) {
+      return { ok: false, error: toFriendlyMessage(retryErr) };
+    }
   }
 }

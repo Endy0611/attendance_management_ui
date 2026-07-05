@@ -26,22 +26,30 @@ async function request<T>(
     },
   });
 
-  // Handles Spring Boot ProblemDetail style error parsing
-  if (!res.ok) {
-    let errorMessage = `Server error: ${res.status}`;
-    try {
-      const errorJson = await res.json();
-      if (errorJson && errorJson.message) {
-        errorMessage = errorJson.message;
-      }
-    } catch {
-      // Fallback if response body is empty or not JSON
-    }
-    throw new Error(errorMessage);
+  if (res.status === 204) {
+    return undefined as T;
   }
 
-  // Returns the raw payload directly as verified by Swagger
-  return await res.json();
+  const data = await res.json().catch(() => undefined);
+
+  // Per the current OpenAPI spec (V5), every course-controller endpoint now
+  // returns the ApiResponse<T> envelope { success, message, payload, status,
+  // timestamp } — this used to be raw and was fixed here to match the spec.
+  const isEnvelope =
+    data && typeof data === "object" && !Array.isArray(data) && "success" in data;
+
+  if (isEnvelope) {
+    if (!res.ok || !data.success) {
+      throw new Error(data.message ?? `Server error: ${res.status}`);
+    }
+    return data.payload as T;
+  }
+
+  if (!res.ok) {
+    throw new Error(`Server error: ${res.status}`);
+  }
+
+  return data as T;
 }
 
 export const courseService = {

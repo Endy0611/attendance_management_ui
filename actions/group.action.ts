@@ -6,8 +6,10 @@ import { getTokens } from "@/lib/server-auth";
 import { groupService } from "@/service/group.service";
 import { courseService } from "@/service/course.service";
 import { adminService } from "@/service/admin.service";
+import { majorService } from "@/service/major.service";
 import type { GroupMemberResponse, GroupResponse } from "@/types/group-types";
 import type { CourseResponse } from "@/types/course-types";
+import type { MajorResponse } from "@/types/major-types";
 import type { AppUserResponse } from "@/types/auth-types";
 
 type ActionResult<T = undefined> =
@@ -20,6 +22,11 @@ const groupSchema = z.object({
   instructorId: z.string().min(1, "Instructor is required"),
   capacity: z.number().int().min(1, "Capacity must be at least 1"),
   semester: z.string().optional(),
+  // Real academic hierarchy fields — see CLAUDE.md §2. batchId is
+  // intentionally not accepted here yet since BatchController isn't exposed
+  // over REST (service layer only), so there's no way to validate/pick one.
+  majorId: z.string().optional(),
+  shift: z.string().optional(),
 });
 
 async function requireToken(): Promise<ActionResult<string>> {
@@ -70,6 +77,19 @@ export async function getCourseOptionsAction(): Promise<ActionResult<CourseRespo
   }
 }
 
+/** Feeds the major picker in the group form dialog. */
+export async function getMajorOptionsAction(): Promise<ActionResult<MajorResponse[]>> {
+  const auth = await requireToken();
+  if (!auth.ok) return auth;
+
+  try {
+    const majors = await majorService.list(auth.data);
+    return { ok: true, data: majors };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
 /** Feeds the instructor picker — filtered to role INSTRUCTOR client-side. */
 export async function getInstructorOptionsAction(): Promise<ActionResult<AppUserResponse[]>> {
   const auth = await requireToken();
@@ -104,6 +124,8 @@ export async function createGroupAction(input: {
   instructorId: string;
   capacity: number;
   semester?: string;
+  majorId?: string;
+  shift?: string;
 }): Promise<ActionResult<GroupResponse>> {
   const parsed = groupSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
@@ -122,7 +144,15 @@ export async function createGroupAction(input: {
 
 export async function updateGroupAction(
   id: string,
-  input: { courseId: string; name: string; instructorId: string; capacity: number; semester?: string }
+  input: {
+    courseId: string;
+    name: string;
+    instructorId: string;
+    capacity: number;
+    semester?: string;
+    majorId?: string;
+    shift?: string;
+  }
 ): Promise<ActionResult<GroupResponse>> {
   const parsed = groupSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };

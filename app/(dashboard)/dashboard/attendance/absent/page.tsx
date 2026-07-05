@@ -17,7 +17,7 @@ export default function AbsentPage() {
   const [loadingSessions, setLoadingSessions] = useState(true)
 
   useEffect(() => {
-    sessionApi.list().then(setSessions).finally(() => setLoadingSessions(false))
+    sessionApi.forCurrentUser().then(setSessions).finally(() => setLoadingSessions(false))
   }, [])
 
   useEffect(() => {

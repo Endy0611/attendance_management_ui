@@ -1,5 +1,18 @@
 #!/usr/bin/env sh
 . "$(dirname -- "$0")/_/husky.sh"
 
-echo "🚀 Running production build check before pushing..."
+echo "Checking code before committing..."
+
+# 1. Run the Next.js build process to catch TypeScript/Lint errors
 npm run build
+
+# 2. Capture the exit code of the build
+EXIT_CODE=$?
+
+# 3. If the build fails, block the commit
+if [ $EXIT_CODE -ne 0 ]; then
+  echo "❌ Build failed! Please fix errors before committing."
+  exit $EXIT_CODE
+fi
+
+echo "✅ Build passed! Proceeding with commit."
