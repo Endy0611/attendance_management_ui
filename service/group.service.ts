@@ -6,7 +6,9 @@ import type {
   GroupResponse,
 } from "@/types/group-types";
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+// Same fix as admin.service.ts / auth.service.ts — this was missing the
+// /api/v1 version prefix that every other service file defaults with.
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080/api/v1";
 
 async function request<T>(
   path: string,

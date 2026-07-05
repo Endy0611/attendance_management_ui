@@ -28,6 +28,7 @@ export const ROUTE_POLICY: { prefix: string; roles: Role[] }[] = [
   { prefix: "/dashboard/reports", roles: ["ADMIN", "INSTRUCTOR"] },
   { prefix: "/dashboard/zones", roles: ["ADMIN"] },
   { prefix: "/dashboard/courses", roles: ["ADMIN"] },
+  { prefix: "/dashboard/majors", roles: ["ADMIN"] },
   { prefix: "/dashboard/attendance/override", roles: ["ADMIN", "INSTRUCTOR"] },
   { prefix: "/dashboard/attendance/absent", roles: ["ADMIN", "INSTRUCTOR"] },
   { prefix: "/dashboard/attendance/session", roles: ["ADMIN", "INSTRUCTOR"] },

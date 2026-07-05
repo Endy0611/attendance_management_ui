@@ -4,6 +4,7 @@ import { useState, useTransition } from "react"
 import { getCoursesAction, deleteCourseAction } from "@/actions/course.action"
 import { CourseFormDialog } from "@/components/courses/course-form-dialog"
 import type { CourseResponse } from "@/types/course-types"
+import { toastSuccess, toastError } from "@/lib/toast"
 import { PlusIcon, PencilIcon, TrashIcon, LoaderIcon, SearchIcon, BookOpenIcon } from "lucide-react"
 
 export function CourseManager({ initialCourses }: { initialCourses: CourseResponse[] }) {
@@ -11,13 +12,7 @@ export function CourseManager({ initialCourses }: { initialCourses: CourseRespon
   const [search, setSearch] = useState("")
   const [dialog, setDialog] = useState<CourseResponse | "create" | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
-  const [toast, setToast] = useState("")
   const [isRefreshing, startRefresh] = useTransition()
-
-  function showToast(msg: string) {
-    setToast(msg)
-    setTimeout(() => setToast(""), 3000)
-  }
 
   function refresh() {
     startRefresh(async () => {
@@ -33,10 +28,10 @@ export function CourseManager({ initialCourses }: { initialCourses: CourseRespon
     setDeletingId(null)
 
     if (!result.ok) {
-      showToast(result.error)
+      toastError(result.error)
       return
     }
-    showToast("Course deleted")
+    toastSuccess("Course deleted")
     refresh()
   }
 
@@ -140,17 +135,11 @@ export function CourseManager({ initialCourses }: { initialCourses: CourseRespon
           course={dialog === "create" ? null : dialog}
           onClose={() => setDialog(null)}
           onSaved={() => {
-            showToast(dialog === "create" ? "Course created" : "Course updated")
+            toastSuccess(dialog === "create" ? "Course created" : "Course updated")
             setDialog(null)
             refresh()
           }}
         />
-      )}
-
-      {toast && (
-        <div className="fixed bottom-4 right-4 z-50 bg-foreground text-background text-sm px-4 py-2 rounded-lg shadow-lg">
-          {toast}
-        </div>
       )}
     </div>
   )

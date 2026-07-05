@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { loginServerAction } from "@/actions/auth-server.action";
 import { useAuthStore } from "@/store/auth.store";
+import { toastSuccess, toastError } from "@/lib/toast";
 
 export default function LoginComponent() {
   const router = useRouter();
@@ -25,6 +26,7 @@ export default function LoginComponent() {
 
     if (!result.ok) {
       setError(result.error);
+      toastError(result.error);
       setLoading(false);
       return;
     }
@@ -36,6 +38,7 @@ export default function LoginComponent() {
       result.data,
     );
 
+    toastSuccess(`Welcome back, ${result.data.name}`);
     router.push("/dashboard");
   }
 

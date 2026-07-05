@@ -176,15 +176,28 @@ export const groupApi = {
 }
 
 export const sessionApi = {
-  list:      ()                         => request<Session[]>("/api/v1/sessions"),
-  byGroup:   (groupId: string)          => request<Session[]>(`/api/v1/sessions/group/${groupId}`),
-  get:       (id: string)               => request<Session>(`/api/v1/sessions/${id}`),
-  create:    (body: object)             => request<Session>("/api/v1/sessions", { method: "POST", body: JSON.stringify(body) }),
-  update:    (id: string, body: object) => request<Session>(`/api/v1/sessions/${id}`, { method: "PUT", body: JSON.stringify(body) }),
-  remove:    (id: string)               => request<void>(`/api/v1/sessions/${id}`, { method: "DELETE" }),
-  myActive:  ()                         => request<Session[]>("/api/v1/sessions/me/active"),
-  myHistory: ()                         => request<Session[]>("/api/v1/sessions/me/history"),
-  myAll:     ()                         => request<Session[]>("/api/v1/sessions/me/all"),
+  list:        ()                         => request<Session[]>("/api/v1/sessions"),
+  byGroup:     (groupId: string)          => request<Session[]>(`/api/v1/sessions/group/${groupId}`),
+  get:         (id: string)               => request<Session>(`/api/v1/sessions/${id}`),
+  create:      (body: object)             => request<Session>("/api/v1/sessions", { method: "POST", body: JSON.stringify(body) }),
+  update:      (id: string, body: object) => request<Session>(`/api/v1/sessions/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  remove:      (id: string)               => request<void>(`/api/v1/sessions/${id}`, { method: "DELETE" }),
+  myActive:    ()                         => request<Session[]>("/api/v1/sessions/me/active"),
+  myUpcoming:  ()                         => request<Session[]>("/api/v1/sessions/me/upcoming"),
+  myHistory:   ()                         => request<Session[]>("/api/v1/sessions/me/history"),
+  /**
+   * Role-aware "all sessions I can see" — GET /api/v1/sessions is ADMIN-only
+   * on the backend (calling it as INSTRUCTOR 403s, and /me/all was never a
+   * real endpoint at all). ADMIN gets every session directly; everyone else
+   * gets sessions for each of their own groups instead.
+   */
+  forCurrentUser: async (): Promise<Session[]> => {
+    const role = useAuthStore.getState().user?.role
+    if (role === "ADMIN") return request<Session[]>("/api/v1/sessions")
+    const myGroups = await request<Group[]>("/api/v1/groups/me")
+    const perGroup = await Promise.all(myGroups.map((g) => request<Session[]>(`/api/v1/sessions/group/${g.id}`)))
+    return perGroup.flat()
+  },
 }
 
 export const attendanceApi = {

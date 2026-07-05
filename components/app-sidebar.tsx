@@ -6,7 +6,7 @@ import {
   CalendarIcon, ClipboardListIcon, ScanFaceIcon, Settings2Icon,
   GraduationCapIcon, ShieldCheckIcon, DownloadIcon,
 } from "lucide-react"
-
+import Link from "next/link"
 import { NavMain } from "@/components/nav-main"
 import { NavUser } from "@/components/nav-user"
 import {
@@ -19,6 +19,7 @@ const adminNav = [
   { title: "Dashboard", url: "/dashboard", icon: <LayoutDashboardIcon />, items: [] },
   { title: "Users", url: "/dashboard/users", icon: <UsersIcon />, items: [] },
   { title: "Courses", url: "/dashboard/courses", icon: <BookOpenIcon />, items: [] },
+  { title: "Majors", url: "/dashboard/majors", icon: <GraduationCapIcon />, items: [] },
   { title: "Zones", url: "/dashboard/zones", icon: <MapPinIcon />, items: [] },
   { title: "Groups", url: "/dashboard/groups", icon: <LayersIcon />, items: [] },
   { title: "Sessions", url: "/dashboard/sessions", icon: <CalendarIcon />, items: [] },
@@ -116,7 +117,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
-              <a href="/dashboard">
+              <Link href="/dashboard">
                 <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
                   <GraduationCapIcon className="size-4" />
                 </div>
@@ -127,7 +128,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                     {meta.label}
                   </span>
                 </div>
-              </a>
+              </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
@@ -142,7 +143,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           user={{
             name:   user?.name  ?? "Guest User",
             email:  user?.email ?? "no-session",
-            avatar: user?.avatar ?? "",
+            avatar: user?.avatar || undefined,
           }}
         />
       </SidebarFooter>

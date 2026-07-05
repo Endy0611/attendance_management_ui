@@ -7,12 +7,17 @@
  * Why server actions instead of calling the service directly from the client?
  * → API calls stay server-side (your backend URL never leaks to the browser).
  * → Easy to add rate-limiting, logging, or cookies later.
+ *
+ * Error messages returned to the client always go through
+ * toFriendlyMessage() — the real status/backend message is logged
+ * server-side (see auth.service.ts) but never shown to the user directly.
  */
 
 "use server";
 
 import { z } from "zod";
 import { authService } from "@/service/auth.service";
+import { ApiError, toFriendlyMessage } from "@/lib/api-error";
 
 // ─── Zod schemas (validation rules) ─────────────────────────────────────────
 
@@ -65,8 +70,12 @@ export async function loginAction(
   try {
     const data = await authService.login(parsed.data);
     return { ok: true, data };
-  } catch (e) {
-    return { ok: false, error: (e as Error).message };
+  } catch (err) {
+    // 401 here means "wrong credentials", not "expired session".
+    if (err instanceof ApiError && err.status === 401) {
+      return { ok: false, error: "Incorrect email/student ID or password" };
+    }
+    return { ok: false, error: toFriendlyMessage(err) };
   }
 }
 
@@ -88,8 +97,8 @@ export async function registerAction(
     await authService.register(parsed.data);
     // After register, backend sends OTP to email for verification
     return { ok: true, data: { email: parsed.data.email } };
-  } catch (e) {
-    return { ok: false, error: (e as Error).message };
+  } catch (err) {
+    return { ok: false, error: toFriendlyMessage(err) };
   }
 }
 
@@ -102,8 +111,8 @@ export async function verifyOtpAction(
   try {
     await authService.verifyOtp(email, otp);
     return { ok: true, data: undefined };
-  } catch (e) {
-    return { ok: false, error: (e as Error).message };
+  } catch (err) {
+    return { ok: false, error: toFriendlyMessage(err) };
   }
 }
 
@@ -111,8 +120,8 @@ export async function resendOtpAction(email: string): Promise<ActionResult> {
   try {
     await authService.resendOtp(email);
     return { ok: true, data: undefined };
-  } catch (e) {
-    return { ok: false, error: (e as Error).message };
+  } catch (err) {
+    return { ok: false, error: toFriendlyMessage(err) };
   }
 }
 
@@ -128,8 +137,8 @@ export async function forgotPasswordAction(
   try {
     await authService.forgotPassword(parsed.data);
     return { ok: true, data: undefined };
-  } catch (e) {
-    return { ok: false, error: (e as Error).message };
+  } catch (err) {
+    return { ok: false, error: toFriendlyMessage(err) };
   }
 }
 
@@ -140,8 +149,8 @@ export async function verifyForgotPasswordAction(
   try {
     const resetToken = await authService.verifyForgotPassword({ email, otp });
     return { ok: true, data: resetToken };
-  } catch (e) {
-    return { ok: false, error: (e as Error).message };
+  } catch (err) {
+    return { ok: false, error: toFriendlyMessage(err) };
   }
 }
 
@@ -158,8 +167,8 @@ export async function resetPasswordAction(
   try {
     await authService.resetPassword({ resetToken, newPassword });
     return { ok: true, data: undefined };
-  } catch (e) {
-    return { ok: false, error: (e as Error).message };
+  } catch (err) {
+    return { ok: false, error: toFriendlyMessage(err) };
   }
 }
 
@@ -179,7 +188,7 @@ export async function changePasswordAction(
   try {
     await authService.changePassword(parsed.data, token);
     return { ok: true, data: undefined };
-  } catch (e) {
-    return { ok: false, error: (e as Error).message };
+  } catch (err) {
+    return { ok: false, error: toFriendlyMessage(err) };
   }
 }

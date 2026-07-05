@@ -6,6 +6,7 @@ import { GroupFormDialog } from "@/components/groups/group-form-dialog"
 import { GroupMembersDialog } from "@/components/groups/group-members-dialog"
 import { IfRole } from "@/components/role-guard"
 import type { GroupResponse } from "@/types/group-types"
+import { toastSuccess, toastError } from "@/lib/toast"
 import { PlusIcon, PencilIcon, TrashIcon, LoaderIcon, SearchIcon, LayersIcon, UsersIcon } from "lucide-react"
 
 export function GroupManager({ initialGroups }: { initialGroups: GroupResponse[] }) {
@@ -14,13 +15,7 @@ export function GroupManager({ initialGroups }: { initialGroups: GroupResponse[]
   const [dialog, setDialog] = useState<GroupResponse | "create" | null>(null)
   const [membersDialog, setMembersDialog] = useState<GroupResponse | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
-  const [toast, setToast] = useState("")
   const [isRefreshing, startRefresh] = useTransition()
-
-  function showToast(msg: string) {
-    setToast(msg)
-    setTimeout(() => setToast(""), 3000)
-  }
 
   function refresh() {
     startRefresh(async () => {
@@ -34,8 +29,8 @@ export function GroupManager({ initialGroups }: { initialGroups: GroupResponse[]
     setDeletingId(group.id)
     const result = await deleteGroupAction(group.id)
     setDeletingId(null)
-    if (!result.ok) { showToast(result.error); return }
-    showToast("Group deleted")
+    if (!result.ok) { toastError(result.error); return }
+    toastSuccess("Group deleted")
     refresh()
   }
 
@@ -104,6 +99,11 @@ export function GroupManager({ initialGroups }: { initialGroups: GroupResponse[]
                   </span>
                   <p className="font-medium mt-1.5 truncate">{g.name}</p>
                   <p className="text-xs text-muted-foreground mt-0.5 truncate">{g.instructorName}</p>
+                  {(g.majorName || g.shift) && (
+                    <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                      {[g.majorName, g.shift].filter(Boolean).join(" · ")}
+                    </p>
+                  )}
                 </div>
                 <IfRole allow={["ADMIN"]}>
                   <div className="flex gap-1 shrink-0">
@@ -155,7 +155,7 @@ export function GroupManager({ initialGroups }: { initialGroups: GroupResponse[]
           group={dialog === "create" ? null : dialog}
           onClose={() => setDialog(null)}
           onSaved={() => {
-            showToast(dialog === "create" ? "Group created" : "Group updated")
+            toastSuccess(dialog === "create" ? "Group created" : "Group updated")
             setDialog(null)
             refresh()
           }}
@@ -164,12 +164,6 @@ export function GroupManager({ initialGroups }: { initialGroups: GroupResponse[]
 
       {membersDialog && (
         <GroupMembersDialog group={membersDialog} onClose={() => { setMembersDialog(null); refresh() }} />
-      )}
-
-      {toast && (
-        <div className="fixed bottom-4 right-4 z-50 bg-foreground text-background text-sm px-4 py-2 rounded-lg shadow-lg">
-          {toast}
-        </div>
       )}
     </div>
   )

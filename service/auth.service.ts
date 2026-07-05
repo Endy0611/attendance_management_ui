@@ -2,8 +2,12 @@
  * auth.service.ts
  *
  * All raw API calls for authentication.
- * Each function throws an Error with the server message on failure.
- * This keeps your components clean — they just try/catch.
+ * Each function throws an ApiError(status, message) on failure — the status
+ * lets callers (actions/*.action.ts) distinguish "expired token" from "wrong
+ * password" from "backend bug" via lib/api-error.ts's toFriendlyMessage(),
+ * without ever showing a raw status code or stack trace to the end user.
+ * Full technical detail is logged here via console.error (server-side only —
+ * shows up in your `npm run dev` terminal, never sent to the browser).
  */
 
 import type {
@@ -19,8 +23,9 @@ import type {
   UpdateProfileRequest,
   VerifyForgotPasswordRequest,
 } from "@/types/auth-types";
+import { ApiError } from "@/lib/api-error";
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080/api/v1";
 
 // ─── Helper ─────────────────────────────────────────────────────────────────
 
@@ -28,18 +33,37 @@ async function request<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, {
-    headers: { "Content-Type": "application/json", ...options.headers },
-    ...options,
-  });
+  const method = options.method ?? "GET";
+  let res: Response;
 
-  const data: ApiResponse<T> = await res.json();
-
-  if (!res.ok || !data.success) {
-    throw new Error(data.message ?? "Something went wrong");
+  try {
+    res = await fetch(`${BASE_URL}${path}`, {
+      headers: { "Content-Type": "application/json", ...options.headers },
+      ...options,
+    });
+  } catch (networkErr) {
+    console.error(`[auth.service] ${method} ${path} → network failure:`, networkErr);
+    throw new ApiError(0, "Network request failed");
   }
 
-  return data.payload;
+  let data: any = null;
+  try {
+    data = await res.json();
+  } catch {
+    console.error(`[auth.service] ${method} ${path} → ${res.status}, non-JSON response body`);
+    throw new ApiError(res.status, "Server returned a non-JSON response");
+  }
+
+  if (!res.ok) {
+    console.error(
+      `[auth.service] ${method} ${path} → ${res.status}:`,
+      JSON.stringify(data, null, 2)
+    );
+    const errorMsg = data?.detail || data?.message || "Something went wrong";
+    throw new ApiError(res.status, errorMsg);
+  }
+
+  return data && typeof data === "object" && "payload" in data ? data.payload : data;
 }
 
 // ─── Auth endpoints ──────────────────────────────────────────────────────────
@@ -110,7 +134,7 @@ export const authService = {
 
   /** POST /auths/logout */
   logout: (body: RefreshTokenRequest) =>
-    request<void>("/auths/logout", {
+    request<void>(`/auths/logout`, {
       method: "POST",
       body: JSON.stringify(body),
     }),
@@ -120,12 +144,41 @@ export const authService = {
     request<AppUserResponse>("/auths/me", {
       headers: { Authorization: `Bearer ${token}` },
     }),
-
+    
   /** PUT /auths/me  (requires JWT) */
-  updateMe: (body: UpdateProfileRequest, token: string) =>
-    request<AppUserResponse>("/auths/me", {
+    async updateMe(body: UpdateProfileRequest, token: string): Promise<AppUserResponse> {
+    // Force the production domain string directly to match where your images live
+    const url = "https://instantcheck.online/api/v1/auths/me";
+    
+    console.log("[auth.service.updateMe] Fetching production endpoint:", url);
+
+    const res = await fetch(url, {
       method: "PUT",
-      headers: { Authorization: `Bearer ${token}` },
+      // Use clean, stripped headers to bypass Next.js internal header pollution
+      headers: {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`,
+      },
       body: JSON.stringify(body),
-    }),
+      cache: "no-store",
+    });
+
+    const text = await res.text();
+    console.log("[auth.service.updateMe] Response Status:", res.status);
+
+    if (!res.ok) {
+      console.error("[auth.service.updateMe] Failed response body:", text);
+      let parsedError;
+      try {
+        parsedError = JSON.parse(text);
+      } catch {
+        parsedError = { detail: text };
+      }
+      throw new ApiError(res.status, parsedError.detail || parsedError.message || "Internal Update Error");
+    }
+
+    const data = JSON.parse(text);
+    return data && typeof data === "object" && "payload" in data ? data.payload : data;
+  },
 };

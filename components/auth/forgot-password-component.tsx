@@ -20,6 +20,7 @@ import {
   verifyForgotPasswordAction,
   resetPasswordAction,
 } from "@/actions/auth.action";
+import { toastSuccess, toastError } from "@/lib/toast";
 
 type Step = 1 | 2 | 3;
 
@@ -44,7 +45,9 @@ export default function ForgotPasswordComponent() {
 
     if (!result.ok) {
       setError(result.error);
+      toastError(result.error);
     } else {
+      toastSuccess("Code sent", "Check your email for the reset code.");
       setEmail(formData.get("email") as string);
       setStep(2);
     }
@@ -62,7 +65,9 @@ export default function ForgotPasswordComponent() {
 
     if (!result.ok) {
       setError(result.error);
+      toastError(result.error);
     } else {
+      toastSuccess("Code verified");
       setResetToken(result.data); // server returns a string token
       setStep(3);
     }
@@ -80,6 +85,7 @@ export default function ForgotPasswordComponent() {
 
     if (formData.get("newPassword") !== formData.get("confirmPassword")) {
       setError("Passwords do not match");
+      toastError("Passwords do not match");
       setLoading(false);
       return;
     }
@@ -88,7 +94,9 @@ export default function ForgotPasswordComponent() {
 
     if (!result.ok) {
       setError(result.error);
+      toastError(result.error);
     } else {
+      toastSuccess("Password reset", "You can now sign in with your new password.");
       router.push("/login?reset=1");
     }
 

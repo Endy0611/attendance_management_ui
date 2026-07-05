@@ -15,6 +15,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/auth.store";
+import { toastSuccess, toastError } from "@/lib/toast";
 
 export default function LogoutButton() {
   const router = useRouter();
@@ -25,10 +26,16 @@ export default function LogoutButton() {
     setLoading(true);
 
     // Clear server-side HttpOnly cookies
-    await fetch("/api/auth/logout", { method: "POST" });
+    const res = await fetch("/api/auth/logout", { method: "POST" });
 
     // Clear client-side Zustand store
     clearAuth();
+
+    if (res.ok) {
+      toastSuccess("Signed out");
+    } else {
+      toastError("Signed out locally, but the server logout call failed.");
+    }
 
     router.push("/login");
   }
