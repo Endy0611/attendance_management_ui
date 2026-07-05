@@ -148,7 +148,7 @@ export const authService = {
   /** PUT /auths/me  (requires JWT) */
     async updateMe(body: UpdateProfileRequest, token: string): Promise<AppUserResponse> {
     // Force the production domain string directly to match where your images live
-    const url = "https://instantcheck.online/api/v1/auths/me";
+    const url = `${process.env.NEXT_PUBLIC_API_URL}/auths/me`;
     
     console.log("[auth.service.updateMe] Fetching production endpoint:", url);
 
