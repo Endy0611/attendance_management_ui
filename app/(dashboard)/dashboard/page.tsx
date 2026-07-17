@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Space_Grotesk, JetBrains_Mono } from "next/font/google"
 import { AppSidebar } from "@/components/app-sidebar"
 import {
@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/breadcrumb"
 import { Separator } from "@/components/ui/separator"
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
+import { NotificationBell } from "@/components/notifications/notification-bell"
 import { useAuthStore } from "@/store/auth.store"
 import { adminApi, courseApi, groupApi, sessionApi, attendanceApi } from "@/lib/api"
 import type { AppUser, Course, Group, Session, StudentAttendance } from "@/lib/api"
@@ -78,6 +79,34 @@ function useClock() {
   return now
 }
 
+// Animates a number smoothly from its previous value to the next one whenever it changes,
+// including the very first render (counts up from 0) — used to make stats feel alive.
+function useCountUp(target: number, duration = 800) {
+  const [display, setDisplay] = useState(0)
+  const prevRef = useRef(0)
+  useEffect(() => {
+    const from = prevRef.current
+    const to = target
+    if (from === to) { setDisplay(to); return }
+    let raf = 0
+    const start = performance.now()
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / duration)
+      const eased = 1 - Math.pow(1 - t, 3)
+      setDisplay(Math.round(from + (to - from) * eased))
+      if (t < 1) {
+        raf = requestAnimationFrame(tick)
+      } else {
+        prevRef.current = to
+      }
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target, duration])
+  return display
+}
+
 // ── Small building blocks ───────────────────────────────────────────────────────
 function LiveDot({ color = "#16A34A" }: { color?: string }) {
   return (
@@ -133,46 +162,68 @@ function DashboardHeader({ title, subtitle, accent = ACCENT.navy, icon }: {
 }) {
   const now = useClock()
   return (
-    <div className="pb-2">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+    <div className="relative pb-2 animate-fade-up overflow-hidden">
+      {/* ambient glow: a soft blurred wash of the role's accent color behind the header */}
+      <div
+        className="pointer-events-none absolute -top-16 -left-10 size-56 rounded-full blur-3xl opacity-[0.16]"
+        // style={{ background: accent }}
+        aria-hidden
+      />
+      <div className="relative flex flex-wrap items-end justify-between gap-3">
         <div>
           <div className="flex items-center gap-2.5">
             <span
-              className="flex items-center justify-center size-8 rounded-xl shrink-0"
+              className="relative flex mt-1 ms-1 items-center justify-center size-8 rounded-xl shrink-0 transition-transform duration-300 hover:scale-110 hover:-rotate-6"
               style={{ background: `linear-gradient(135deg, ${accent}26, ${accent}0D)`, color: accent }}
             >
+              <span
+                className="absolute inset-0 rounded-xl motion-safe:animate-pulse"
+                style={{ boxShadow: `0 0 0 1px ${accent}30` }}
+                aria-hidden
+              />
               {icon ?? <SparklesIcon className="size-4" />}
             </span>
             <h1 className="text-2xl font-semibold tracking-tight font-[family-name:var(--font-display)]">{title}</h1>
           </div>
           <p className="text-sm text-muted-foreground mt-1.5 ml-[42px]">{subtitle}</p>
         </div>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground bg-card border rounded-full px-3 py-1.5 font-[family-name:var(--font-mono)] shadow-sm">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground bg-card/70 backdrop-blur-md border rounded-full px-3 py-1.5 font-[family-name:var(--font-mono)] shadow-sm transition-shadow hover:shadow-md">
           <LiveDot />
           {now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
         </div>
       </div>
       {/* signature: thin identity-colored gradient rule, ties every section below back to this role */}
-      <div className="h-px w-full mt-4 rounded-full" style={{ background: `linear-gradient(90deg, ${accent}55, ${accent}00 65%)` }} />
+      <div className="relative h-px w-full mt-4 rounded-full overflow-hidden">
+        <div
+          className="absolute inset-0 origin-left animate-scale-in"
+          style={{ background: `linear-gradient(90deg, ${accent}55, ${accent}00 65%)`, animationDuration: "0.9s" }}
+        />
+      </div>
     </div>
   )
 }
 
-function StatCard({ label, value, icon, accent, caption, trend, spark }: {
+function StatCard({ label, value, icon, accent, caption, trend, spark, delay = 0 }: {
   label: string; value: number | string
-  icon: React.ReactNode; accent: string; caption?: string; trend?: number; spark?: number[]
+  icon: React.ReactNode; accent: string; caption?: string; trend?: number; spark?: number[]; delay?: number
 }) {
   const sparkData = spark ?? seededWave(label)
+  const numericTarget = typeof value === "number" ? value : 0
+  const animatedValue = useCountUp(numericTarget)
+  const displayValue = typeof value === "number" ? animatedValue : value
   return (
-    <div className="group rounded-2xl border bg-card p-5 flex flex-col gap-3 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_28px_-16px_rgba(15,23,42,0.18)] hover:shadow-[0_1px_2px_rgba(15,23,42,0.06),0_18px_36px_-14px_rgba(15,23,42,0.22)] hover:-translate-y-0.5 transition-all duration-300">
+    <div
+      className="group animate-fade-up rounded-2xl border bg-card p-5 flex flex-col gap-3 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_28px_-16px_rgba(15,23,42,0.18)] hover:shadow-[0_1px_2px_rgba(15,23,42,0.08),0_20px_40px_-14px_rgba(15,23,42,0.25)] hover:-translate-y-1 transition-all duration-300"
+      style={{ animationDelay: `${delay}ms` }}
+    >
       <div className="flex items-start justify-between">
-        <div className="p-2.5 rounded-xl w-fit transition-transform group-hover:scale-105" style={{ backgroundColor: `${accent}1A`, color: accent }}>
+        <div className="p-2.5 rounded-xl w-fit transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-6" style={{ backgroundColor: `${accent}1A`, color: accent }}>
           {icon}
         </div>
         <Sparkline data={sparkData} color={accent} />
       </div>
       <div>
-        <p className="text-2xl font-semibold tracking-tight font-[family-name:var(--font-display)] tabular-nums">{value}</p>
+        <p className="text-2xl font-semibold tracking-tight font-[family-name:var(--font-display)] tabular-nums">{displayValue}</p>
         <div className="flex items-center gap-1.5 mt-0.5">
           <p className="text-xs text-muted-foreground">{label}</p>
           {trend !== undefined && <TrendBadge value={trend} />}
@@ -204,20 +255,31 @@ function smoothPath(points: readonly (readonly [number, number])[]) {
 function MiniAreaChart({ data, color, valueLabel, valuePrefix = "" }: {
   data: { label: string; value: number }[]; color: string; valueLabel?: string; valuePrefix?: string
 }) {
-  const w = 600, h = 200, pad = 24
+  const w = 600, h = 190
+  const padLeft = 30, padRight = 8, padTop = 18, padBottom = 24
   const [hover, setHover] = useState<number | null>(null)
+  const [mounted, setMounted] = useState(false)
+  const linePathRef = useRef<SVGPathElement>(null)
   const max = Math.max(1, ...data.map(d => d.value))
   const min = Math.min(0, ...data.map(d => d.value))
-  const stepX = (w - pad * 2) / (data.length - 1 || 1)
+  const stepX = (w - padLeft - padRight) / (data.length - 1 || 1)
   const points = data.map((d, i) => {
-    const x = pad + i * stepX
-    const y = h - pad - ((d.value - min) / (max - min || 1)) * (h - pad * 2 - 14)
+    const x = padLeft + i * stepX
+    const y = h - padBottom - ((d.value - min) / (max - min || 1)) * (h - padTop - padBottom)
     return [x, y] as const
   })
   const linePath = smoothPath(points)
-  const areaPath = `${linePath} L${points[points.length - 1][0]},${h - pad} L${points[0][0]},${h - pad} Z`
+  const areaPath = `${linePath} L${points[points.length - 1][0]},${h - padBottom} L${points[0][0]},${h - padBottom} Z`
   const gradientId = `grad-${color.replace("#", "")}`
-  const gridLines = 4
+  const glowId = `glow-${color.replace("#", "")}`
+
+  // two quiet reference lines (mid + top) with their values labeled on the left,
+  // instead of a dense boxed grid — gives scale without visual noise
+  const ticks = [
+    { y: h - padBottom, value: min },
+    { y: h - padBottom - (h - padTop - padBottom) / 2, value: (min + max) / 2 },
+    { y: padTop, value: max },
+  ]
 
   const handleMove = (e: React.MouseEvent<SVGSVGElement>) => {
     const rect = e.currentTarget.getBoundingClientRect()
@@ -233,8 +295,25 @@ function MiniAreaChart({ data, color, valueLabel, valuePrefix = "" }: {
 
   const active = hover !== null ? hover : points.length - 1
   const [ax, ay] = points[active]
-  const tooltipLeft = ax > w - 140
-  const tooltipX = tooltipLeft ? ax - 130 : ax + 12
+  const tooltipLeft = ax > w - 132
+  const tooltipX = tooltipLeft ? ax - 122 : ax + 10
+
+  useEffect(() => {
+    setMounted(false)
+    const el = linePathRef.current
+    if (!el) return
+    const length = el.getTotalLength()
+    el.style.transition = "none"
+    el.style.strokeDasharray = `${length}`
+    el.style.strokeDashoffset = `${length}`
+    const raf = requestAnimationFrame(() => {
+      el.style.transition = "stroke-dashoffset 1.2s cubic-bezier(0.16,1,0.3,1)"
+      el.style.strokeDashoffset = "0"
+      setMounted(true)
+    })
+    return () => cancelAnimationFrame(raf)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linePath])
 
   return (
     <svg
@@ -245,38 +324,57 @@ function MiniAreaChart({ data, color, valueLabel, valuePrefix = "" }: {
     >
       <defs>
         <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.32" />
+          <stop offset="0%" stopColor={color} stopOpacity="0.28" />
           <stop offset="100%" stopColor={color} stopOpacity="0" />
         </linearGradient>
+        <filter id={glowId} x="-30%" y="-30%" width="160%" height="160%">
+          <feGaussianBlur stdDeviation="5" result="blur" />
+          <feMerge>
+            <feMergeNode in="blur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
       </defs>
-      {[...Array(gridLines)].map((_, i) => {
-        const y = pad + (i * (h - pad * 2 - 14)) / (gridLines - 1)
-        return <line key={i} x1={pad} x2={w - pad} y1={y} y2={y} stroke="currentColor" className="text-muted-foreground/15" strokeWidth="1" />
-      })}
-      <path d={areaPath} fill={`url(#${gradientId})`} />
-      <path d={linePath} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
 
-      {/* hover guide line */}
-      <line x1={ax} x2={ax} y1={pad - 6} y2={h - pad} stroke={color} strokeWidth="1" strokeDasharray="3 4" opacity={hover !== null ? 0.5 : 0} />
-
-      {points.map(([x, y], i) => (
-        <g key={i} opacity={hover === null || hover === i ? 1 : 0.35} style={{ transition: "opacity 0.15s" }}>
-          {i === active && <circle cx={x} cy={y} r="9" fill={color} opacity="0.15" />}
-          <circle cx={x} cy={y} r={i === active ? 4.5 : 3} fill="white" stroke={color} strokeWidth="2" />
+      {/* quiet reference lines + value labels, fading in softly */}
+      {ticks.map((t, i) => (
+        <g key={i} className="animate-scale-in" style={{ transformOrigin: `${padLeft}px ${t.y}px`, animationDelay: `${i * 80}ms`, animationFillMode: "backwards" }}>
+          <line x1={padLeft} x2={w - padRight} y1={t.y} y2={t.y} stroke="currentColor" className="text-muted-foreground/12" strokeWidth="1" strokeDasharray={i === 0 ? undefined : "3 5"} />
+          <text x={padLeft - 8} y={t.y + 3} textAnchor="end" fontSize="10" className="fill-muted-foreground/60 font-[family-name:var(--font-mono)]">
+            {Math.round(t.value)}
+          </text>
         </g>
       ))}
 
+      <path d={areaPath} fill={`url(#${gradientId})`} className="animate-scale-in" style={{ transformOrigin: "50% 100%", animationDuration: "0.8s" }} />
+
+      {/* faint blurred glow duplicate riding behind the crisp line */}
+      <path d={linePath} fill="none" stroke={color} strokeWidth="3" opacity={mounted ? 0.25 : 0} style={{ transition: "opacity 0.6s ease 0.4s" }} filter={`url(#${glowId})`} />
+      <path ref={linePathRef} d={linePath} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+
+      {/* hover guide line */}
+      <line x1={ax} x2={ax} y1={padTop - 4} y2={h - padBottom} stroke={color} strokeWidth="1" strokeDasharray="3 4" opacity={hover !== null ? 0.45 : 0} style={{ transition: "opacity 0.15s" }} />
+
+      {/* only the active point is marked — a live pulsing dot rather than a row of static circles */}
+      <g
+        className="animate-scale-in"
+        style={{ transformOrigin: `${ax}px ${ay}px`, animationDelay: "900ms", animationFillMode: "backwards", transition: "transform 0.2s cubic-bezier(0.16,1,0.3,1)" }}
+      >
+        <circle cx={ax} cy={ay} r="10" fill={color} opacity="0.12" className="motion-safe:animate-ping" style={{ transformOrigin: `${ax}px ${ay}px` }} />
+        <circle cx={ax} cy={ay} r="4.5" fill="white" stroke={color} strokeWidth="2.5" />
+      </g>
+
       {data.map((d, i) => (
-        <text key={i} x={pad + i * stepX} y={h - 2} textAnchor="middle" fontSize="10.5" className="fill-muted-foreground font-[family-name:var(--font-mono)]">
+        <text key={i} x={padLeft + i * stepX} y={h - 4} textAnchor="middle" fontSize="10.5" className="fill-muted-foreground/70 font-[family-name:var(--font-mono)]">
           {d.label}
         </text>
       ))}
 
       {/* tooltip bubble */}
-      <foreignObject x={tooltipX} y={Math.max(0, ay - 46)} width="128" height="46">
+      <foreignObject x={tooltipX} y={Math.max(0, ay - 44)} width="122" height="44">
         <div
-          className="rounded-lg px-2.5 py-1.5 text-white shadow-lg font-[family-name:var(--font-mono)]"
-          style={{ backgroundColor: color }}
+          className="rounded-xl px-2.5 py-1.5 text-white shadow-lg font-[family-name:var(--font-mono)] backdrop-blur-sm"
+          style={{ backgroundColor: `${color}E6` }}
         >
           <p className="text-sm font-semibold leading-tight">{valuePrefix}{data[active].value.toLocaleString()}</p>
           <p className="text-[10px] opacity-80 leading-tight">{valueLabel ?? data[active].label}</p>
@@ -286,9 +384,10 @@ function MiniAreaChart({ data, color, valueLabel, valuePrefix = "" }: {
   )
 }
 
-// Tiny decorative sparkline for stat cards
+// Tiny decorative sparkline for stat cards — now draws itself in on mount, just like the big chart
 function Sparkline({ data, color, width = 72, height = 30 }: { data: number[]; color: string; width?: number; height?: number }) {
   const pad = 3
+  const lineRef = useRef<SVGPathElement>(null)
   const max = Math.max(...data)
   const min = Math.min(...data)
   const stepX = (width - pad * 2) / (data.length - 1 || 1)
@@ -300,6 +399,22 @@ function Sparkline({ data, color, width = 72, height = 30 }: { data: number[]; c
   const linePath = smoothPath(points)
   const gid = `spark-${color.replace("#", "")}-${width}`
   const areaPath = `${linePath} L${points[points.length - 1][0]},${height} L${points[0][0]},${height} Z`
+
+  useEffect(() => {
+    const el = lineRef.current
+    if (!el) return
+    const length = el.getTotalLength()
+    el.style.transition = "none"
+    el.style.strokeDasharray = `${length}`
+    el.style.strokeDashoffset = `${length}`
+    const raf = requestAnimationFrame(() => {
+      el.style.transition = "stroke-dashoffset 0.9s cubic-bezier(0.16,1,0.3,1)"
+      el.style.strokeDashoffset = "0"
+    })
+    return () => cancelAnimationFrame(raf)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linePath])
+
   return (
     <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className="overflow-visible">
       <defs>
@@ -308,9 +423,9 @@ function Sparkline({ data, color, width = 72, height = 30 }: { data: number[]; c
           <stop offset="100%" stopColor={color} stopOpacity="0" />
         </linearGradient>
       </defs>
-      <path d={areaPath} fill={`url(#${gid})`} />
-      <path d={linePath} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx={points[points.length - 1][0]} cy={points[points.length - 1][1]} r="2.5" fill={color} />
+      <path d={areaPath} fill={`url(#${gid})`} className="animate-scale-in" style={{ transformOrigin: "50% 100%", animationDuration: "0.7s" }} />
+      <path ref={lineRef} d={linePath} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={points[points.length - 1][0]} cy={points[points.length - 1][1]} r="2.5" fill={color} className="animate-scale-in" style={{ transformOrigin: `${points[points.length - 1][0]}px ${points[points.length - 1][1]}px`, animationDelay: "0.8s", animationFillMode: "backwards" }} />
     </svg>
   )
 }
@@ -334,6 +449,11 @@ function DistributionBar({ label, value, total, color }: {
   label: string; value: number; total: number; color: string
 }) {
   const pct = total > 0 ? Math.round((value / total) * 100) : 0
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => setMounted(true))
+    return () => cancelAnimationFrame(raf)
+  }, [])
   return (
     <div>
       <div className="flex justify-between text-xs mb-1.5">
@@ -341,7 +461,7 @@ function DistributionBar({ label, value, total, color }: {
         <span className="text-muted-foreground font-[family-name:var(--font-mono)]">{value} · {pct}%</span>
       </div>
       <div className="h-2 rounded-full bg-muted overflow-hidden">
-        <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, backgroundColor: color }} />
+        <div className="h-full rounded-full transition-all duration-700 ease-out" style={{ width: `${mounted ? pct : 0}%`, backgroundColor: color }} />
       </div>
     </div>
   )
@@ -355,21 +475,27 @@ function CircularGauge({ value, color, size = 128, label, sublabel }: {
   const r = (size - stroke) / 2
   const c = 2 * Math.PI * r
   const pct = Math.max(0, Math.min(100, value))
-  const offset = c - (pct / 100) * c
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => setMounted(true))
+    return () => cancelAnimationFrame(raf)
+  }, [])
+  const offset = c - ((mounted ? pct : 0) / 100) * c
+  const animatedPct = useCountUp(pct, 900)
 
   return (
-    <div className="flex flex-col items-center justify-center">
+    <div className="flex flex-col items-center justify-center animate-scale-in">
       <div className="relative" style={{ width: size, height: size }}>
         <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
           <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="currentColor" className="text-muted" strokeWidth={stroke} />
           <circle
             cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={stroke}
             strokeDasharray={c} strokeDashoffset={offset} strokeLinecap="round"
-            style={{ transition: "stroke-dashoffset 0.6s ease" }}
+            style={{ transition: "stroke-dashoffset 1s cubic-bezier(0.16,1,0.3,1)" }}
           />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-2xl font-semibold font-[family-name:var(--font-display)] tabular-nums">{pct}%</span>
+          <span className="text-2xl font-semibold font-[family-name:var(--font-display)] tabular-nums">{animatedPct}%</span>
         </div>
       </div>
       {label && <p className="text-sm font-medium mt-3">{label}</p>}
@@ -390,7 +516,7 @@ function ActivityHeatmap({ rows, days, color }: {
         {days.map(d => (
           <div key={d} className="text-center text-[10px] text-muted-foreground font-[family-name:var(--font-mono)]">{d}</div>
         ))}
-        {rows.map(row => (
+        {rows.map((row, rowIndex) => (
           <div key={row.label} className="contents">
             <div className="text-xs font-medium truncate pr-2 flex items-center">{row.label}</div>
             {row.counts.map((v, i) => {
@@ -399,8 +525,13 @@ function ActivityHeatmap({ rows, days, color }: {
                 <div
                   key={i}
                   title={`${row.label} · ${days[i]}: ${v}`}
-                  className="aspect-square rounded-md"
-                  style={{ backgroundColor: color, opacity: intensity }}
+                  className="aspect-square rounded-md animate-scale-in transition-transform duration-200 hover:scale-125"
+                  style={{
+                    backgroundColor: color,
+                    opacity: intensity,
+                    animationDelay: `${(rowIndex * days.length + i) * 18}ms`,
+                    animationFillMode: "backwards",
+                  }}
                 />
               )
             })}
@@ -490,17 +621,17 @@ function AdminDashboard() {
       />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        <StatCard label="Students"    value={students}        icon={<UsersIcon className="size-5" />}    accent={ACCENT.sky} />
-        <StatCard label="Instructors" value={instructors}     icon={<UsersIcon className="size-5" />}    accent={ACCENT.amber} />
-        <StatCard label="Courses"     value={courses.length}  icon={<BookOpenIcon className="size-5" />} accent={ACCENT.violet} />
-        <StatCard label="Groups"      value={groups.length}   icon={<LayersIcon className="size-5" />}   accent={ACCENT.emerald} />
-        <StatCard label="Sessions"    value={sessions.length} icon={<CalendarIcon className="size-5" />} accent={ACCENT.navy} trend={sessionTrend} spark={chartData.map(d => d.value)} />
-        <StatCard label="Active Now"  value={active.length}   icon={<ActivityIcon className="size-5" />} accent={ACCENT.rose}
+        <StatCard label="Students"    value={students}        icon={<UsersIcon className="size-5" />}    accent={ACCENT.sky} delay={0} />
+        <StatCard label="Instructors" value={instructors}     icon={<UsersIcon className="size-5" />}    accent={ACCENT.amber} delay={60} />
+        <StatCard label="Courses"     value={courses.length}  icon={<BookOpenIcon className="size-5" />} accent={ACCENT.violet} delay={120} />
+        <StatCard label="Groups"      value={groups.length}   icon={<LayersIcon className="size-5" />}   accent={ACCENT.emerald} delay={180} />
+        <StatCard label="Sessions"    value={sessions.length} icon={<CalendarIcon className="size-5" />} accent={ACCENT.navy} trend={sessionTrend} spark={chartData.map(d => d.value)} delay={240} />
+        <StatCard label="Active Now"  value={active.length}   icon={<ActivityIcon className="size-5" />} accent={ACCENT.rose} delay={300}
           caption={active.length > 0 ? `${active.length} check-in${active.length === 1 ? "" : "s"} live` : "Nothing running"} />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2 rounded-2xl border bg-card p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_28px_-16px_rgba(15,23,42,0.18)] hover:shadow-[0_1px_2px_rgba(15,23,42,0.06),0_18px_36px_-14px_rgba(15,23,42,0.22)] transition-shadow duration-300">
+        <div className="lg:col-span-2 rounded-2xl border bg-card p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_28px_-16px_rgba(15,23,42,0.18)] hover:shadow-[0_1px_2px_rgba(15,23,42,0.06),0_18px_36px_-14px_rgba(15,23,42,0.22)] transition-shadow duration-300 animate-fade-up" style={{ animationDelay: "360ms" }}>
           <div className="flex items-center justify-between mb-4">
             <div>
               <SectionLabel color={ACCENT.navy}>Analytics</SectionLabel>
@@ -512,7 +643,7 @@ function AdminDashboard() {
           <MiniAreaChart data={chartData} color={ACCENT.navy} valueLabel="Since last week" />
         </div>
 
-        <div className="rounded-2xl border bg-card p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_28px_-16px_rgba(15,23,42,0.18)] hover:shadow-[0_1px_2px_rgba(15,23,42,0.06),0_18px_36px_-14px_rgba(15,23,42,0.22)] transition-shadow duration-300 flex flex-col items-center justify-center">
+        <div className="rounded-2xl border bg-card p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_28px_-16px_rgba(15,23,42,0.18)] hover:shadow-[0_1px_2px_rgba(15,23,42,0.06),0_18px_36px_-14px_rgba(15,23,42,0.22)] transition-shadow duration-300 flex flex-col items-center justify-center animate-fade-up" style={{ animationDelay: "420ms" }}>
           <div className="self-start mb-2">
             <SectionLabel color={ACCENT.gold}>Target</SectionLabel>
             <h2 className="font-semibold font-[family-name:var(--font-display)]">Weekly Goal</h2>
@@ -522,7 +653,7 @@ function AdminDashboard() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2 rounded-2xl border bg-card p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_28px_-16px_rgba(15,23,42,0.18)] hover:shadow-[0_1px_2px_rgba(15,23,42,0.06),0_18px_36px_-14px_rgba(15,23,42,0.22)] transition-shadow duration-300">
+        <div className="lg:col-span-2 rounded-2xl border bg-card p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_28px_-16px_rgba(15,23,42,0.18)] hover:shadow-[0_1px_2px_rgba(15,23,42,0.06),0_18px_36px_-14px_rgba(15,23,42,0.22)] transition-shadow duration-300 animate-fade-up" style={{ animationDelay: "480ms" }}>
           <div className="flex items-center justify-between mb-4">
             <div>
               <SectionLabel color={ACCENT.navy}>Engagement</SectionLabel>
@@ -537,15 +668,15 @@ function AdminDashboard() {
           )}
         </div>
 
-        <div className="rounded-2xl border bg-card p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_28px_-16px_rgba(15,23,42,0.18)] hover:shadow-[0_1px_2px_rgba(15,23,42,0.06),0_18px_36px_-14px_rgba(15,23,42,0.22)] transition-shadow duration-300">
+        <div className="rounded-2xl border bg-card p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_28px_-16px_rgba(15,23,42,0.18)] hover:shadow-[0_1px_2px_rgba(15,23,42,0.06),0_18px_36px_-14px_rgba(15,23,42,0.22)] transition-shadow duration-300 animate-fade-up" style={{ animationDelay: "540ms" }}>
           <SectionLabel color={ACCENT.rose}>Live feed</SectionLabel>
           <h2 className="font-semibold mb-4 font-[family-name:var(--font-display)]">Live Sessions</h2>
           {active.length === 0 ? (
             <EmptyState icon={<ActivityIcon className="size-4" />} message="Nothing is checking in right now." accent={ACCENT.rose} />
           ) : (
             <div className="space-y-2.5 max-h-56 overflow-y-auto">
-              {active.map(s => (
-                <div key={s.id} className="border rounded-xl p-3 hover:bg-muted/40 transition-colors">
+              {active.map((s, i) => (
+                <div key={s.id} className="border rounded-xl p-3 hover:bg-muted/40 hover:-translate-x-0.5 transition-all duration-200 animate-fade-up" style={{ animationDelay: `${i * 60}ms` }}>
                   <div className="flex items-center justify-between">
                     <p className="font-medium text-sm truncate">{s.groupName} — {s.courseCode}</p>
                     <LiveDot />
@@ -561,12 +692,12 @@ function AdminDashboard() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <div className="rounded-2xl border bg-card p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_28px_-16px_rgba(15,23,42,0.18)] hover:shadow-[0_1px_2px_rgba(15,23,42,0.06),0_18px_36px_-14px_rgba(15,23,42,0.22)] transition-shadow duration-300">
+        <div className="rounded-2xl border bg-card p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_28px_-16px_rgba(15,23,42,0.18)] hover:shadow-[0_1px_2px_rgba(15,23,42,0.06),0_18px_36px_-14px_rgba(15,23,42,0.22)] transition-shadow duration-300 animate-fade-up" style={{ animationDelay: "600ms" }}>
           <SectionLabel color={ACCENT.navy}>People</SectionLabel>
           <h2 className="font-semibold mb-4 font-[family-name:var(--font-display)]">Recent Users</h2>
           <div className="space-y-3">
-            {users.slice(0, 6).map(u => (
-              <div key={u.id} className="flex items-center gap-3">
+            {users.slice(0, 6).map((u, i) => (
+              <div key={u.id} className="flex items-center gap-3 animate-fade-up transition-transform duration-200 hover:translate-x-1" style={{ animationDelay: `${700 + i * 50}ms` }}>
                 <div className="size-9 rounded-full flex items-center justify-center text-xs font-semibold shrink-0"
                   style={{ backgroundColor: `${ACCENT.navy}1A`, color: ACCENT.navy }}>
                   {u.name?.slice(0, 2).toUpperCase()}
@@ -586,7 +717,7 @@ function AdminDashboard() {
           </div>
         </div>
 
-        <div className="rounded-2xl border bg-card p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_28px_-16px_rgba(15,23,42,0.18)] hover:shadow-[0_1px_2px_rgba(15,23,42,0.06),0_18px_36px_-14px_rgba(15,23,42,0.22)] transition-shadow duration-300">
+        <div className="rounded-2xl border bg-card p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_28px_-16px_rgba(15,23,42,0.18)] hover:shadow-[0_1px_2px_rgba(15,23,42,0.06),0_18px_36px_-14px_rgba(15,23,42,0.22)] transition-shadow duration-300 animate-fade-up" style={{ animationDelay: "660ms" }}>
           <SectionLabel color={ACCENT.rose}>Breakdown</SectionLabel>
           <h2 className="font-semibold mb-4 font-[family-name:var(--font-display)]">Role Distribution</h2>
           <div className="space-y-4">
@@ -639,14 +770,14 @@ function InstructorDashboard() {
       />
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <StatCard label="My Groups"      value={groups.length}   icon={<LayersIcon className="size-5" />}   accent={ACCENT.violet} />
-        <StatCard label="Total Sessions" value={sessions.length} icon={<CalendarIcon className="size-5" />} accent={ACCENT.sky} trend={sessionTrend} spark={chartData.map(d => d.value)} />
-        <StatCard label="Active Now"     value={active.length}   icon={<ActivityIcon className="size-5" />} accent={ACCENT.rose}
+        <StatCard label="My Groups"      value={groups.length}   icon={<LayersIcon className="size-5" />}   accent={ACCENT.violet} delay={0} />
+        <StatCard label="Total Sessions" value={sessions.length} icon={<CalendarIcon className="size-5" />} accent={ACCENT.sky} trend={sessionTrend} spark={chartData.map(d => d.value)} delay={60} />
+        <StatCard label="Active Now"     value={active.length}   icon={<ActivityIcon className="size-5" />} accent={ACCENT.rose} delay={120}
           caption={active.length > 0 ? `${active.length} check-in${active.length === 1 ? "" : "s"} live` : "Nothing running"} />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2 rounded-2xl border bg-card p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_28px_-16px_rgba(15,23,42,0.18)] hover:shadow-[0_1px_2px_rgba(15,23,42,0.06),0_18px_36px_-14px_rgba(15,23,42,0.22)] transition-shadow duration-300">
+        <div className="lg:col-span-2 rounded-2xl border bg-card p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_28px_-16px_rgba(15,23,42,0.18)] hover:shadow-[0_1px_2px_rgba(15,23,42,0.06),0_18px_36px_-14px_rgba(15,23,42,0.22)] transition-shadow duration-300 animate-fade-up" style={{ animationDelay: "240ms" }}>
           <div className="flex items-center justify-between mb-4">
             <div>
               <SectionLabel color={ACCENT.sky}>Analytics</SectionLabel>
@@ -657,7 +788,7 @@ function InstructorDashboard() {
           <MiniAreaChart data={chartData} color={ACCENT.navy} valueLabel="Since last week" />
         </div>
 
-        <div className="rounded-2xl border bg-card p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_28px_-16px_rgba(15,23,42,0.18)] hover:shadow-[0_1px_2px_rgba(15,23,42,0.06),0_18px_36px_-14px_rgba(15,23,42,0.22)] transition-shadow duration-300 flex flex-col items-center justify-center">
+        <div className="rounded-2xl border bg-card p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_28px_-16px_rgba(15,23,42,0.18)] hover:shadow-[0_1px_2px_rgba(15,23,42,0.06),0_18px_36px_-14px_rgba(15,23,42,0.22)] transition-shadow duration-300 flex flex-col items-center justify-center animate-fade-up" style={{ animationDelay: "300ms" }}>
           <div className="self-start mb-2">
             <SectionLabel color={ACCENT.violet}>Capacity</SectionLabel>
             <h2 className="font-semibold font-[family-name:var(--font-display)]">Group Fill Rate</h2>
@@ -666,7 +797,7 @@ function InstructorDashboard() {
         </div>
       </div>
 
-      <div className="rounded-2xl border bg-card p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_28px_-16px_rgba(15,23,42,0.18)] hover:shadow-[0_1px_2px_rgba(15,23,42,0.06),0_18px_36px_-14px_rgba(15,23,42,0.22)] transition-shadow duration-300">
+      <div className="rounded-2xl border bg-card p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_28px_-16px_rgba(15,23,42,0.18)] hover:shadow-[0_1px_2px_rgba(15,23,42,0.06),0_18px_36px_-14px_rgba(15,23,42,0.22)] transition-shadow duration-300 animate-fade-up" style={{ animationDelay: "360ms" }}>
         <div className="flex items-center justify-between mb-4">
           <div>
             <SectionLabel color={ACCENT.violet}>Team</SectionLabel>
@@ -679,8 +810,8 @@ function InstructorDashboard() {
           )}
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
-          {groups.map(g => (
-            <div key={g.id} className="border rounded-xl p-4 hover:bg-muted/30 transition-colors">
+          {groups.map((g, i) => (
+            <div key={g.id} className="border rounded-xl p-4 hover:bg-muted/30 hover:-translate-y-0.5 transition-all duration-200 animate-fade-up" style={{ animationDelay: `${420 + i * 50}ms` }}>
               <div className="flex justify-between items-start mb-2">
                 <div>
                   <p className="font-medium text-sm">{g.name}</p>
@@ -689,7 +820,7 @@ function InstructorDashboard() {
                 <span className="text-xs text-muted-foreground font-[family-name:var(--font-mono)]">{g.memberCount}</span>
               </div>
               <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                <div className="h-full rounded-full transition-all duration-500" style={{ width: `${(g.memberCount / maxMembers) * 100}%`, backgroundColor: ACCENT.violet }} />
+                <div className="h-full rounded-full transition-all duration-700 ease-out" style={{ width: `${(g.memberCount / maxMembers) * 100}%`, backgroundColor: ACCENT.violet }} />
               </div>
             </div>
           ))}
@@ -740,9 +871,9 @@ function StudentDashboard() {
           { label: "Verified",     ok: user?.verified },
           { label: "Active",       ok: user?.active },
           { label: "Device Bound", ok: user?.deviceBound },
-        ].map(f => (
-          <span key={f.label} className={`flex items-center gap-1.5 text-xs px-3 py-1 rounded-full font-medium
-            ${f.ok ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
+        ].map((f, i) => (
+          <span key={f.label} className={`flex items-center gap-1.5 text-xs px-3 py-1 rounded-full font-medium animate-fade-up transition-transform duration-200 hover:scale-105
+            ${f.ok ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`} style={{ animationDelay: `${i * 60}ms` }}>
             {f.ok ? <CheckCircleIcon className="size-3" /> : <XCircleIcon className="size-3" />}
             {f.label}
           </span>
@@ -750,7 +881,7 @@ function StudentDashboard() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <div className="rounded-2xl border bg-card p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_28px_-16px_rgba(15,23,42,0.18)] hover:shadow-[0_1px_2px_rgba(15,23,42,0.06),0_18px_36px_-14px_rgba(15,23,42,0.22)] transition-shadow duration-300 flex flex-col items-center justify-center">
+        <div className="rounded-2xl border bg-card p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_28px_-16px_rgba(15,23,42,0.18)] hover:shadow-[0_1px_2px_rgba(15,23,42,0.06),0_18px_36px_-14px_rgba(15,23,42,0.22)] transition-shadow duration-300 flex flex-col items-center justify-center animate-fade-up" style={{ animationDelay: "180ms" }}>
           <div className="self-start mb-2">
             <SectionLabel color={ACCENT.emerald}>Progress</SectionLabel>
             <h2 className="font-semibold font-[family-name:var(--font-display)]">Attendance Rate</h2>
@@ -759,10 +890,10 @@ function StudentDashboard() {
         </div>
 
         <div className="lg:col-span-2 grid gap-4 sm:grid-cols-3">
-          <StatCard label="Present" value={present} icon={<CheckCircleIcon className="size-5" />} accent={ACCENT.emerald} />
-          <StatCard label="Late"    value={late}    icon={<ClockIcon className="size-5" />}       accent={ACCENT.amber} />
-          <StatCard label="Absent"  value={absent}  icon={<XCircleIcon className="size-5" />}     accent={ACCENT.rose} />
-          <div className="sm:col-span-3 rounded-2xl border bg-card p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_28px_-16px_rgba(15,23,42,0.18)] hover:shadow-[0_1px_2px_rgba(15,23,42,0.06),0_18px_36px_-14px_rgba(15,23,42,0.22)] transition-shadow duration-300">
+          <StatCard label="Present" value={present} icon={<CheckCircleIcon className="size-5" />} accent={ACCENT.emerald} delay={240} />
+          <StatCard label="Late"    value={late}    icon={<ClockIcon className="size-5" />}       accent={ACCENT.amber} delay={300} />
+          <StatCard label="Absent"  value={absent}  icon={<XCircleIcon className="size-5" />}     accent={ACCENT.rose} delay={360} />
+          <div className="sm:col-span-3 rounded-2xl border bg-card p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_28px_-16px_rgba(15,23,42,0.18)] hover:shadow-[0_1px_2px_rgba(15,23,42,0.06),0_18px_36px_-14px_rgba(15,23,42,0.22)] transition-shadow duration-300 animate-fade-up" style={{ animationDelay: "420ms" }}>
             <div className="flex justify-between items-baseline mb-2">
               <div>
                 <SectionLabel color={ACCENT.rose}>Breakdown</SectionLabel>
@@ -779,7 +910,7 @@ function StudentDashboard() {
         </div>
       </div>
 
-      <div className="rounded-2xl border bg-card p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_28px_-16px_rgba(15,23,42,0.18)] hover:shadow-[0_1px_2px_rgba(15,23,42,0.06),0_18px_36px_-14px_rgba(15,23,42,0.22)] transition-shadow duration-300">
+      <div className="rounded-2xl border bg-card p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_28px_-16px_rgba(15,23,42,0.18)] hover:shadow-[0_1px_2px_rgba(15,23,42,0.06),0_18px_36px_-14px_rgba(15,23,42,0.22)] transition-shadow duration-300 animate-fade-up" style={{ animationDelay: "480ms" }}>
         <div className="flex items-center justify-between mb-4">
           <div>
             <SectionLabel color={ACCENT.rose}>Live feed</SectionLabel>
@@ -795,8 +926,8 @@ function StudentDashboard() {
           <EmptyState icon={<CalendarIcon className="size-4" />} message="No active sessions in your groups right now — check back when class starts." accent={ACCENT.rose} />
         ) : (
           <div className="grid gap-3 sm:grid-cols-2">
-            {sessions.map(s => (
-              <div key={s.id} className="border rounded-xl p-4 hover:bg-muted/30 transition-colors">
+            {sessions.map((s, i) => (
+              <div key={s.id} className="border rounded-xl p-4 hover:bg-muted/30 hover:-translate-y-0.5 transition-all duration-200 animate-fade-up" style={{ animationDelay: `${540 + i * 50}ms` }}>
                 <div className="flex items-center justify-between mb-1">
                   <p className="font-medium text-sm truncate">{s.groupName} — {s.courseCode}</p>
                   <LiveDot />
@@ -828,6 +959,24 @@ export default function Page() {
 
   return (
     <SidebarProvider>
+      <style>{`
+        @keyframes fadeUp {
+          from { opacity: 0; transform: translateY(14px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes scaleIn {
+          from { opacity: 0; transform: scale(0.94); }
+          to { opacity: 1; transform: scale(1); }
+        }
+        .animate-fade-up { animation: fadeUp 0.55s cubic-bezier(0.16, 1, 0.3, 1) both; }
+        .animate-scale-in { animation: scaleIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; }
+        @media (prefers-reduced-motion: reduce) {
+          .animate-fade-up, .animate-scale-in {
+            animation-duration: 0.001ms !important;
+            animation-delay: 0ms !important;
+          }
+        }
+      `}</style>
       <AppSidebar />
       <SidebarInset className={`${spaceGrotesk.variable} ${jetbrainsMono.variable}`}>
         <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
@@ -840,6 +989,9 @@ export default function Page() {
               </BreadcrumbItem>
             </BreadcrumbList>
           </Breadcrumb>
+        <div className="ml-auto flex items-center gap-1">
+          <NotificationBell />
+        </div>
         </header>
 
         <main className="flex flex-1 flex-col gap-4 p-6 bg-gradient-to-b from-muted/30 to-transparent">

@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/breadcrumb"
 import { Separator } from "@/components/ui/separator"
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
+import { NotificationBell } from "@/components/notifications/notification-bell"
 
 export default async function FacePage() {
   const user = await requireUser()
@@ -29,6 +30,9 @@ export default async function FacePage() {
               <BreadcrumbItem><BreadcrumbPage>Face Registration</BreadcrumbPage></BreadcrumbItem>
             </BreadcrumbList>
           </Breadcrumb>
+        <div className="ml-auto flex items-center gap-1">
+          <NotificationBell />
+        </div>
         </header>
 
         <main className="flex flex-1 flex-col gap-4 p-6">

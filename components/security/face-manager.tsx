@@ -111,10 +111,10 @@ export function FaceManager({ initialStatus }: { initialStatus: FaceStatusRespon
       </div>
 
       <div className="rounded-xl border bg-card overflow-hidden aspect-video relative bg-muted flex items-center justify-center">
-        <video ref={videoRef} className={`w-full h-full object-cover ${streaming ? "" : "hidden"}`} playsInline muted />
+        <video ref={videoRef} className={`w-full h-full object-cover -scale-x-100 ${streaming ? "" : "hidden"}`} playsInline muted />
         <canvas ref={canvasRef} className="hidden" />
         {captured ? (
-          <img src={captured} alt="Captured" className="w-full h-full object-cover" />
+          <img src={captured} alt="Captured" className="w-full h-full object-cover -scale-x-100" />
         ) : (
           !streaming && (
             <div className="text-center text-muted-foreground">

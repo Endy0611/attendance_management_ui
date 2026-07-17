@@ -1,19 +1,12 @@
 /**
  * lib/api-error.ts
  *
- * ApiError carries the real HTTP status + backend message so service files
- * can log the technical detail (server-side console.error — visible in your
- * `npm run dev` terminal, never sent to the browser), while every action
- * file shows the person a plain-language message via toFriendlyMessage().
+ * ApiError carries the HTTP status alongside the message, so callers can
+ * branch on "was this a 401 I can retry after refreshing the token?" instead
+ * of string-matching error messages.
  *
- * Rule of thumb baked into the mapping below:
- *   400 / 404 / 409  → backend message IS meant for the user
- *                      (e.g. "Current password is incorrect", "Email already
- *                      registered") — these come from your validation /
- *                      business-rule layer, so we show them as-is.
- *   401 / 403 / 5xx / network failure → backend message is NOT meant for the
- *                      user (stack traces, "Something went wrong", etc.) —
- *                      we replace it with a friendly, generic sentence.
+ * toFriendlyMessage() is the single place that turns any thrown error into
+ * copy a user should actually see — never a raw stack trace or "fetch failed".
  */
 
 export class ApiError extends Error {
@@ -26,42 +19,37 @@ export class ApiError extends Error {
   }
 }
 
-const FALLBACK = "Something went wrong. Please try again.";
-
-/**
- * Converts any caught error into a message safe to show in a toast or
- * inline form error. Use this in every actions/*.action.ts catch block
- * instead of `err instanceof Error ? err.message : "..."`.
- */
 export function toFriendlyMessage(err: unknown): string {
   if (err instanceof ApiError) {
-    // Validation / business-rule errors — the backend wrote these for a
-    // human to read, so pass them through.
-    if (err.status === 400 || err.status === 404 || err.status === 409) {
-      return err.message || FALLBACK;
+    switch (err.status) {
+      case 400:
+        return err.message || "That didn't look right — please check the form.";
+      case 401:
+        return "Your session has expired. Please sign in again.";
+      case 403:
+        return "You don't have permission to do that.";
+      case 404:
+        return "We couldn't find what you were looking for.";
+      case 409:
+        return err.message || "That already exists.";
+      case 422:
+        return err.message || "That didn't look right — please check the form.";
+      case 429:
+        return "Too many attempts — please wait a moment and try again.";
+      case 500:
+      case 502:
+      case 503:
+        return "Something went wrong on our end. Please try again.";
+      default:
+        return err.message || "Something went wrong.";
     }
-
-    if (err.status === 401) {
-      return "Your session has expired. Please sign in again.";
-    }
-
-    if (err.status === 403) {
-      return "You don't have permission to do that.";
-    }
-
-    if (err.status === 0) {
-      return "Can't reach the server. Check your connection and try again.";
-    }
-
-    // 5xx and anything else unexpected
-    return "Something went wrong on our end. Please try again in a moment.";
   }
 
-  if (err instanceof Error) {
-    // Non-ApiError (e.g. a thrown redirect, unexpected runtime error) —
-    // never show the raw .message to the user, it's not written for them.
-    return FALLBACK;
+  // fetch() itself throws a bare TypeError when there's no network at all
+  if (err instanceof TypeError && /fetch/i.test(err.message)) {
+    return "Can't reach the server. Check your connection and try again.";
   }
 
-  return FALLBACK;
+  if (err instanceof Error) return err.message;
+  return "Something went wrong.";
 }

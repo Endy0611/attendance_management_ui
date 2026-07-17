@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { AppSidebar } from "@/components/app-sidebar"
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
+import { NotificationBell } from "@/components/notifications/notification-bell"
 import { Separator } from "@/components/ui/separator"
 import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage, BreadcrumbLink, BreadcrumbSeparator } from "@/components/ui/breadcrumb"
 import { attendanceApi, sessionApi } from "@/lib/api"
@@ -57,6 +58,9 @@ export default function AttendanceSessionPage() {
               <BreadcrumbItem><BreadcrumbPage>By Session</BreadcrumbPage></BreadcrumbItem>
             </BreadcrumbList>
           </Breadcrumb>
+        <div className="ml-auto flex items-center gap-1">
+          <NotificationBell />
+        </div>
         </header>
 
         <main className="flex flex-1 flex-col gap-4 p-6">

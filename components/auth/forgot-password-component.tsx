@@ -4,7 +4,7 @@
  * 3-step flow all in one component:
  *   Step 1 → Enter Gmail address → receive OTP
  *   Step 2 → Enter OTP → receive resetToken (string from server)
- *   Step 3 → Enter new password with resetToken → redirect to /login
+ *   Step 3 → Enter new password with resetToken → panels slide apart → /login
  *
  * Why one component?  Simpler to share state (email, resetToken) between steps
  * without needing URL params or extra pages.
@@ -15,12 +15,19 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { motion } from "framer-motion";
+import { KeyRoundIcon } from "lucide-react";
 import {
   forgotPasswordAction,
   verifyForgotPasswordAction,
   resetPasswordAction,
 } from "@/actions/auth.action";
 import { toastSuccess, toastError } from "@/lib/toast";
+import { forgotPasswordSchema, otpSchema, resetPasswordSchema, fieldErrorsOf } from "@/schemas/auth.schema";
+import {
+  AuthBrandPanel, AuthMobileBrand, AUTH_BRAND, AUTH_EXIT_DURATION,
+  authInputClass, authInputRingStyle,
+} from "@/components/auth/auth-brand-panel";
 
 type Step = 1 | 2 | 3;
 
@@ -32,15 +39,27 @@ export default function ForgotPasswordComponent() {
   const [otp, setOtp] = useState("");
   const [resetToken, setResetToken] = useState("");
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
 
   // ── Step 1: Send OTP ──────────────────────────────────────────────────────
   async function handleSendOtp(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError("");
-    setLoading(true);
+    setFieldErrors({});
 
     const formData = new FormData(e.currentTarget);
+    const parsed = forgotPasswordSchema.safeParse({ email: formData.get("email") });
+
+    if (!parsed.success) {
+      const errors = fieldErrorsOf(parsed.error);
+      setFieldErrors(errors);
+      toastError(Object.values(errors)[0] ?? "Please check the form");
+      return;
+    }
+
+    setLoading(true);
     const result = await forgotPasswordAction(formData);
 
     if (!result.ok) {
@@ -48,7 +67,7 @@ export default function ForgotPasswordComponent() {
       toastError(result.error);
     } else {
       toastSuccess("Code sent", "Check your email for the reset code.");
-      setEmail(formData.get("email") as string);
+      setEmail(parsed.data.email);
       setStep(2);
     }
 
@@ -59,8 +78,17 @@ export default function ForgotPasswordComponent() {
   async function handleVerifyOtp(e: React.FormEvent) {
     e.preventDefault();
     setError("");
-    setLoading(true);
+    setFieldErrors({});
 
+    const parsed = otpSchema.safeParse({ otp });
+    if (!parsed.success) {
+      const errors = fieldErrorsOf(parsed.error);
+      setFieldErrors(errors);
+      toastError(Object.values(errors)[0] ?? "Please check the code");
+      return;
+    }
+
+    setLoading(true);
     const result = await verifyForgotPasswordAction(email, otp);
 
     if (!result.ok) {
@@ -79,166 +107,205 @@ export default function ForgotPasswordComponent() {
   async function handleResetPassword(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError("");
-    setLoading(true);
+    setFieldErrors({});
 
     const formData = new FormData(e.currentTarget);
+    const parsed = resetPasswordSchema.safeParse({
+      newPassword: formData.get("newPassword"),
+      confirmPassword: formData.get("confirmPassword"),
+    });
 
-    if (formData.get("newPassword") !== formData.get("confirmPassword")) {
-      setError("Passwords do not match");
-      toastError("Passwords do not match");
-      setLoading(false);
+    if (!parsed.success) {
+      const errors = fieldErrorsOf(parsed.error);
+      setFieldErrors(errors);
+      toastError(Object.values(errors)[0] ?? "Please check the form");
       return;
     }
 
+    setLoading(true);
     const result = await resetPasswordAction(resetToken, formData);
 
     if (!result.ok) {
       setError(result.error);
       toastError(result.error);
-    } else {
-      toastSuccess("Password reset", "You can now sign in with your new password.");
-      router.push("/login?reset=1");
+      setLoading(false);
+      return;
     }
 
-    setLoading(false);
+    toastSuccess("Password reset", "You can now sign in with your new password.");
+    setSuccess(true); // triggers the split-open exit animation
+    setTimeout(() => router.push("/login?reset=1"), AUTH_EXIT_DURATION * 1000);
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="w-full max-w-sm bg-white rounded-2xl shadow p-8 space-y-6">
+    <div className="relative min-h-screen overflow-hidden flex flex-col md:flex-row bg-background">
+      <AuthBrandPanel exiting={success} tagline="Forgot your password? A few quick steps and you're back in." />
 
-        {/* Step indicator */}
-        <div className="flex gap-2">
-          {[1, 2, 3].map((s) => (
-            <div
-              key={s}
-              className={`h-1 flex-1 rounded-full transition-colors ${
-                s <= step ? "bg-blue-600" : "bg-gray-200"
-              }`}
-            />
-          ))}
+      {/* ─── Right panel: steps ─────────────────────────────────────────── */}
+      <motion.div
+        animate={success ? { x: "100%" } : { x: 0 }}
+        transition={{ duration: AUTH_EXIT_DURATION, ease: [0.76, 0, 0.24, 1] }}
+        className="relative flex flex-1 items-center justify-center bg-background px-6 py-16"
+      >
+        <div className="w-full max-w-sm space-y-6">
+          <AuthMobileBrand />
+
+          {/* Step indicator */}
+          <div className="flex gap-2">
+            {[1, 2, 3].map((s) => (
+              <div
+                key={s}
+                className={`h-1 flex-1 rounded-full transition-colors ${s > step ? "bg-muted" : ""}`}
+                style={{ backgroundColor: s <= step ? AUTH_BRAND : undefined }}
+              />
+            ))}
+          </div>
+
+          {/* ── Step 1 ── */}
+          {step === 1 && (
+            <>
+              <div>
+                <h2 className="text-2xl font-bold tracking-tight">Forgot password</h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Enter your Gmail and we&apos;ll send a reset code.
+                </p>
+              </div>
+
+              <form onSubmit={handleSendOtp} noValidate className="space-y-4">
+                <div>
+                  <input
+                    name="email"
+                    type="email"
+                    placeholder="you@gmail.com"
+                    className={`${authInputClass} ${fieldErrors.email ? "border-red-400" : ""}`}
+                    style={authInputRingStyle}
+                  />
+                  {fieldErrors.email && <p className="text-xs text-red-500 mt-1">{fieldErrors.email}</p>}
+                </div>
+
+                {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full text-white rounded-lg py-2 text-sm font-medium transition disabled:opacity-60"
+                  style={{ backgroundColor: AUTH_BRAND }}
+                >
+                  {loading ? "Sending…" : "Send code"}
+                </button>
+              </form>
+            </>
+          )}
+
+          {/* ── Step 2 ── */}
+          {step === 2 && (
+            <>
+              <div>
+                <h2 className="text-2xl font-bold tracking-tight">Enter code</h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Code sent to <span className="font-medium text-foreground">{email}</span>
+                </p>
+              </div>
+
+              <form onSubmit={handleVerifyOtp} noValidate className="space-y-4">
+                <div>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+                    placeholder="123456"
+                    className={`${authInputClass} text-center text-2xl tracking-widest ${fieldErrors.otp ? "border-red-400" : ""}`}
+                    style={authInputRingStyle}
+                  />
+                  {fieldErrors.otp && <p className="text-xs text-red-500 mt-1 text-center">{fieldErrors.otp}</p>}
+                </div>
+
+                {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
+
+                <button
+                  type="submit"
+                  disabled={loading || otp.length !== 6}
+                  className="w-full text-white rounded-lg py-2 text-sm font-medium transition disabled:opacity-60"
+                  style={{ backgroundColor: AUTH_BRAND }}
+                >
+                  {loading ? "Verifying…" : "Verify code"}
+                </button>
+              </form>
+
+              <button onClick={() => setStep(1)} className="text-sm text-muted-foreground hover:underline">
+                ← Back
+              </button>
+            </>
+          )}
+
+          {/* ── Step 3 ── */}
+          {step === 3 && (
+            <>
+              <div>
+                <h2 className="text-2xl font-bold tracking-tight">New password</h2>
+                <p className="text-sm text-muted-foreground mt-1">Choose a strong password (min. 8 chars).</p>
+              </div>
+
+              <form onSubmit={handleResetPassword} noValidate className="space-y-4">
+                <div>
+                  <input
+                    name="newPassword"
+                    type="password"
+                    placeholder="New password"
+                    className={`${authInputClass} ${fieldErrors.newPassword ? "border-red-400" : ""}`}
+                    style={authInputRingStyle}
+                  />
+                  {fieldErrors.newPassword && <p className="text-xs text-red-500 mt-1">{fieldErrors.newPassword}</p>}
+                </div>
+                <div>
+                  <input
+                    name="confirmPassword"
+                    type="password"
+                    placeholder="Confirm password"
+                    className={`${authInputClass} ${fieldErrors.confirmPassword ? "border-red-400" : ""}`}
+                    style={authInputRingStyle}
+                  />
+                  {fieldErrors.confirmPassword && <p className="text-xs text-red-500 mt-1">{fieldErrors.confirmPassword}</p>}
+                </div>
+
+                {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
+
+                <button
+                  type="submit"
+                  disabled={loading || success}
+                  className="w-full text-white rounded-lg py-2 text-sm font-medium transition disabled:opacity-60"
+                  style={{ backgroundColor: AUTH_BRAND }}
+                >
+                  {success ? "Password reset!" : loading ? "Saving…" : "Reset password"}
+                </button>
+              </form>
+            </>
+          )}
+
+          <p className="text-center text-sm text-muted-foreground">
+            <Link href="/login" className="hover:underline" style={{ color: AUTH_BRAND }}>
+              Back to login
+            </Link>
+          </p>
         </div>
+      </motion.div>
 
-        {/* ── Step 1 ── */}
-        {step === 1 && (
-          <>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Forgot password</h1>
-              <p className="text-sm text-gray-500 mt-1">
-                Enter your Gmail and we'll send a reset code.
-              </p>
-            </div>
-
-            <form onSubmit={handleSendOtp} className="space-y-4">
-              <input
-                name="email"
-                type="email"
-                required
-                placeholder="you@gmail.com"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-
-              {error && (
-                <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>
-              )}
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-blue-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition"
-              >
-                {loading ? "Sending…" : "Send code"}
-              </button>
-            </form>
-          </>
-        )}
-
-        {/* ── Step 2 ── */}
-        {step === 2 && (
-          <>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Enter code</h1>
-              <p className="text-sm text-gray-500 mt-1">
-                Code sent to <span className="font-medium text-gray-700">{email}</span>
-              </p>
-            </div>
-
-            <form onSubmit={handleVerifyOtp} className="space-y-4">
-              <input
-                type="text"
-                inputMode="numeric"
-                maxLength={6}
-                value={otp}
-                onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
-                placeholder="123456"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-center text-2xl tracking-widest focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-
-              {error && (
-                <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>
-              )}
-
-              <button
-                type="submit"
-                disabled={loading || otp.length !== 6}
-                className="w-full bg-blue-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition"
-              >
-                {loading ? "Verifying…" : "Verify code"}
-              </button>
-            </form>
-
-            <button onClick={() => setStep(1)} className="text-sm text-gray-500 hover:underline">
-              ← Back
-            </button>
-          </>
-        )}
-
-        {/* ── Step 3 ── */}
-        {step === 3 && (
-          <>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">New password</h1>
-              <p className="text-sm text-gray-500 mt-1">Choose a strong password (min. 8 chars).</p>
-            </div>
-
-            <form onSubmit={handleResetPassword} className="space-y-4">
-              <input
-                name="newPassword"
-                type="password"
-                required
-                minLength={8}
-                placeholder="New password"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <input
-                name="confirmPassword"
-                type="password"
-                required
-                placeholder="Confirm password"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-
-              {error && (
-                <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>
-              )}
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-blue-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition"
-              >
-                {loading ? "Saving…" : "Reset password"}
-              </button>
-            </form>
-          </>
-        )}
-
-        <p className="text-center text-sm text-gray-500">
-          <Link href="/login" className="text-blue-600 hover:underline">
-            Back to login
-          </Link>
-        </p>
-      </div>
+      {/* ─── Success moment ─────────────────────────────────────────────── */}
+      {success && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.4, delay: 0.15 }}
+          className="pointer-events-none fixed inset-0 z-50 flex flex-col items-center justify-center gap-3"
+        >
+          <div className="flex size-14 items-center justify-center rounded-full text-white shadow-lg" style={{ backgroundColor: AUTH_BRAND }}>
+            <KeyRoundIcon className="size-7" />
+          </div>
+          <p className="font-medium">Password reset</p>
+        </motion.div>
+      )}
     </div>
   );
 }

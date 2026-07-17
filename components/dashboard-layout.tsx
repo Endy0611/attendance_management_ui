@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/breadcrumb"
 import { Separator } from "@/components/ui/separator"
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
+import { NotificationBell } from "@/components/notifications/notification-bell"
 
 interface Props {
   children: React.ReactNode
@@ -41,6 +42,9 @@ export function DashboardLayout({ children, breadcrumbs = [] }: Props) {
               ))}
             </BreadcrumbList>
           </Breadcrumb>
+          <div className="ml-auto flex items-center gap-1">
+            <NotificationBell />
+          </div>
         </header>
         <main className="flex flex-1 flex-col gap-4 p-6">
           {children}

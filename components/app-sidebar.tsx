@@ -4,7 +4,7 @@ import * as React from "react"
 import {
   LayoutDashboardIcon, UsersIcon, BookOpenIcon, MapPinIcon, LayersIcon,
   CalendarIcon, ClipboardListIcon, ScanFaceIcon, Settings2Icon,
-  GraduationCapIcon, ShieldCheckIcon, DownloadIcon,
+  GraduationCapIcon, ShieldCheckIcon, DownloadIcon, CalendarOffIcon, CalendarClockIcon
 } from "lucide-react"
 import Link from "next/link"
 import { NavMain } from "@/components/nav-main"
@@ -23,6 +23,8 @@ const adminNav = [
   { title: "Zones", url: "/dashboard/zones", icon: <MapPinIcon />, items: [] },
   { title: "Groups", url: "/dashboard/groups", icon: <LayersIcon />, items: [] },
   { title: "Sessions", url: "/dashboard/sessions", icon: <CalendarIcon />, items: [] },
+  { title: "Holidays", url: "/dashboard/holidays", icon: <CalendarOffIcon />, items: [] },
+  { title: "Timetable", url: "/dashboard/timetable", icon: <CalendarClockIcon />, items: [] },
   {
     title: "Attendance",
     url: "/dashboard/attendance",
@@ -41,6 +43,7 @@ const instructorNav = [
   { title: "Dashboard", url: "/dashboard", icon: <LayoutDashboardIcon />, items: [] },
   { title: "My Groups", url: "/dashboard/groups", icon: <LayersIcon />, items: [] },
   { title: "Sessions", url: "/dashboard/sessions", icon: <CalendarIcon />, items: [] },
+  { title: "Holidays", url: "/dashboard/holidays", icon: <CalendarOffIcon />, items: [] },
   {
     title: "Attendance",
     url: "/dashboard/attendance",

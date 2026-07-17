@@ -1,16 +1,13 @@
 /**
  * verify-otp-component.tsx
  *
- * Used for two things:
- *   1. After register → verify email
- *   2. After forgot-password → we handle this separately in forgot-password flow
- *
+ * Used after register → verify email.
  * The email comes from the URL: /verify-otp?email=john@gmail.com
  *
  * Flow:
- * 1. User enters 6-digit OTP from their email
+ * 1. User enters 6-digit OTP from their email (validated with the shared otpSchema)
  * 2. verifyOtpAction is called
- * 3. On success → redirect to /login with a success message
+ * 3. On success → panels slide apart, then redirect to /login with a success hint
  * 4. "Resend" button calls resendOtpAction
  */
 
@@ -18,8 +15,16 @@
 
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
+import { motion } from "framer-motion";
+import { MailCheckIcon } from "lucide-react";
 import { verifyOtpAction, resendOtpAction } from "@/actions/auth.action";
 import { toastSuccess, toastError } from "@/lib/toast";
+import { otpSchema, fieldErrorsOf } from "@/schemas/auth.schema";
+import {
+  AuthBrandPanel, AuthMobileBrand, AUTH_BRAND, AUTH_EXIT_DURATION,
+  authInputClass, authInputRingStyle,
+} from "@/components/auth/auth-brand-panel";
 
 export default function VerifyOtpComponent() {
   const router = useRouter();
@@ -30,26 +35,37 @@ export default function VerifyOtpComponent() {
 
   const [otp, setOtp] = useState("");
   const [error, setError] = useState("");
+  const [otpError, setOtpError] = useState("");
   const [info, setInfo] = useState("");
   const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
 
   async function handleVerify(e: React.FormEvent) {
     e.preventDefault();
     setError("");
-    setLoading(true);
+    setOtpError("");
 
+    const parsed = otpSchema.safeParse({ otp });
+    if (!parsed.success) {
+      const errors = fieldErrorsOf(parsed.error);
+      setOtpError(errors.otp);
+      toastError(errors.otp ?? "Please check the code");
+      return;
+    }
+
+    setLoading(true);
     const result = await verifyOtpAction(email, otp);
 
     if (!result.ok) {
       setError(result.error);
       toastError(result.error);
-    } else {
-      toastSuccess("Email verified", "You can now sign in.");
-      // Redirect to login with success hint
-      router.push("/login?verified=1");
+      setLoading(false);
+      return;
     }
 
-    setLoading(false);
+    toastSuccess("Email verified", "You can now sign in.");
+    setSuccess(true); // triggers the split-open exit animation
+    setTimeout(() => router.push("/login?verified=1"), AUTH_EXIT_DURATION * 1000);
   }
 
   async function handleResend() {
@@ -67,55 +83,92 @@ export default function VerifyOtpComponent() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="w-full max-w-sm bg-white rounded-2xl shadow p-8 space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Verify your email</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Enter the 6-digit code sent to{" "}
-            <span className="font-medium text-gray-700">{email}</span>
-          </p>
-        </div>
+    <div className="relative min-h-screen overflow-hidden flex flex-col md:flex-row bg-background">
+      <AuthBrandPanel exiting={success} tagline="One more step — verify your email to activate your account." />
 
-        <form onSubmit={handleVerify} className="space-y-4">
-          {/* Single input for the 6-digit OTP */}
-          <input
-            type="text"
-            inputMode="numeric"
-            maxLength={6}
-            value={otp}
-            onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))} // digits only
-            placeholder="123456"
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-center text-2xl tracking-widest focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
+      {/* ─── Right panel: form ──────────────────────────────────────────── */}
+      <motion.div
+        animate={success ? { x: "100%" } : { x: 0 }}
+        transition={{ duration: AUTH_EXIT_DURATION, ease: [0.76, 0, 0.24, 1] }}
+        className="relative flex flex-1 items-center justify-center bg-background px-6 py-16"
+      >
+        <div className="w-full max-w-sm space-y-6">
+          <AuthMobileBrand />
 
-          {error && (
-            <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">
-              {error}
+          <div>
+            <h2 className="text-2xl font-bold tracking-tight">Verify your email</h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              Enter the 6-digit code sent to{" "}
+              <span className="font-medium text-foreground">{email}</span>
             </p>
-          )}
-          {info && (
-            <p className="text-sm text-green-600 bg-green-50 rounded-lg px-3 py-2">
-              {info}
-            </p>
-          )}
+          </div>
+
+          <form onSubmit={handleVerify} noValidate className="space-y-4">
+            <div>
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={6}
+                value={otp}
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))} // digits only
+                placeholder="123456"
+                className={`${authInputClass} text-center text-2xl tracking-widest ${otpError ? "border-red-400" : ""}`}
+                style={authInputRingStyle}
+              />
+              {otpError && <p className="text-xs text-red-500 mt-1 text-center">{otpError}</p>}
+            </div>
+
+            {error && (
+              <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">
+                {error}
+              </p>
+            )}
+            {info && (
+              <p className="text-sm text-emerald-600 bg-emerald-50 rounded-lg px-3 py-2">
+                {info}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading || success || otp.length !== 6}
+              className="w-full text-white rounded-lg py-2 text-sm font-medium transition disabled:opacity-60"
+              style={{ backgroundColor: AUTH_BRAND }}
+            >
+              {success ? "Verified!" : loading ? "Verifying…" : "Verify"}
+            </button>
+          </form>
 
           <button
-            type="submit"
-            disabled={loading || otp.length !== 6}
-            className="w-full bg-blue-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition"
+            onClick={handleResend}
+            className="w-full text-sm hover:underline"
+            style={{ color: AUTH_BRAND }}
           >
-            {loading ? "Verifying…" : "Verify"}
+            Resend code
           </button>
-        </form>
 
-        <button
-          onClick={handleResend}
-          className="w-full text-sm text-blue-600 hover:underline"
+          <p className="text-center text-sm text-muted-foreground">
+            <Link href="/login" className="hover:underline" style={{ color: AUTH_BRAND }}>
+              Back to login
+            </Link>
+          </p>
+        </div>
+      </motion.div>
+
+      {/* ─── Success moment ─────────────────────────────────────────────── */}
+      {success && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.4, delay: 0.15 }}
+          className="pointer-events-none fixed inset-0 z-50 flex flex-col items-center justify-center gap-3"
         >
-          Resend code
-        </button>
-      </div>
+          <div className="flex size-14 items-center justify-center rounded-full text-white shadow-lg" style={{ backgroundColor: AUTH_BRAND }}>
+            <MailCheckIcon className="size-7" />
+          </div>
+          <p className="font-medium">Email verified</p>
+        </motion.div>
+      )}
     </div>
   );
 }

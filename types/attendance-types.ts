@@ -16,3 +16,28 @@ export interface AttendanceResponse {
   distanceMeters: number;
   status: "PRESENT" | "LATE" | "ABSENT";
 }
+
+export interface AttendanceSummaryResponse {
+  sessionId: string;
+  totalStudents: number;
+  present: number;
+  late: number;
+  absent: number;
+}
+
+export interface AbsentStudentResponse {
+  studentId: string;
+  studentName: string;
+  studentEmail: string;
+  studentNumber: string;
+}
+
+export interface StudentAttendanceResponse {
+  attendanceId: string;
+  sessionId: string;
+  sessionTitle: string;
+  groupName: string;
+  courseCode: string;
+  status: "PRESENT" | "LATE" | "ABSENT";
+  checkedInAt: string;
+}

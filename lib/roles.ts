@@ -29,6 +29,7 @@ export const ROUTE_POLICY: { prefix: string; roles: Role[] }[] = [
   { prefix: "/dashboard/zones", roles: ["ADMIN"] },
   { prefix: "/dashboard/courses", roles: ["ADMIN"] },
   { prefix: "/dashboard/majors", roles: ["ADMIN"] },
+  { prefix: "/dashboard/holidays", roles: ["ADMIN", "INSTRUCTOR"] },
   { prefix: "/dashboard/attendance/override", roles: ["ADMIN", "INSTRUCTOR"] },
   { prefix: "/dashboard/attendance/absent", roles: ["ADMIN", "INSTRUCTOR"] },
   { prefix: "/dashboard/attendance/session", roles: ["ADMIN", "INSTRUCTOR"] },
@@ -45,6 +46,7 @@ export const ROUTE_POLICY: { prefix: string; roles: Role[] }[] = [
   // give it the same STUDENT-only restriction instead of leaving it open
   // to every role by omission.
   { prefix: "/dashboard/security/device", roles: ["STUDENT"] },
+  { prefix: "/dashboard/timetable", roles: ["ADMIN", "INSTRUCTOR"] },
 ]
 
 export function policyFor(pathname: string) {

@@ -3,8 +3,10 @@
  *
  * Flow:
  * 1. User fills name, email, password (+ optional phone)
- * 2. registerAction is called → backend creates account + sends OTP email
- * 3. On success → redirect to /verify-otp?email=xxx so user can verify
+ * 2. Validated client-side with the SAME registerSchema the server action uses
+ *    (schemas/auth.schema.ts) — instant feedback, no round trip for typos
+ * 3. registerAction is called → backend creates account + sends OTP email
+ * 4. On success → panels slide apart, then redirect to /verify-otp?email=xxx
  */
 
 "use client";
@@ -12,29 +14,49 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { motion } from "framer-motion";
+import { MailCheckIcon } from "lucide-react";
 import { registerAction } from "@/actions/auth.action";
+import { registerSchema, fieldErrorsOf } from "@/schemas/auth.schema";
 import { toastSuccess, toastError } from "@/lib/toast";
+import {
+  AuthBrandPanel, AuthMobileBrand, AUTH_BRAND, AUTH_EXIT_DURATION,
+  authInputClass, authInputRingStyle,
+} from "@/components/auth/auth-brand-panel";
 
 export default function RegisterComponent() {
   const router = useRouter();
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [email, setEmail] = useState("");
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError("");
-    setLoading(true);
+    setFieldErrors({});
 
     const formData = new FormData(e.currentTarget);
 
-    // Quick client-side password match check (no need to hit server)
-    if (formData.get("password") !== formData.get("confirmPassword")) {
-      setError("Passwords do not match");
-      toastError("Passwords do not match");
-      setLoading(false);
+    // Client-side zod check — same schema the server uses, so nothing here
+    // can pass here and fail there (or vice versa).
+    const parsed = registerSchema.safeParse({
+      name: formData.get("name"),
+      email: formData.get("email"),
+      phone: formData.get("phone") || undefined,
+      password: formData.get("password"),
+      confirmPassword: formData.get("confirmPassword"),
+    });
+
+    if (!parsed.success) {
+      const errors = fieldErrorsOf(parsed.error);
+      setFieldErrors(errors);
+      toastError(Object.values(errors)[0] ?? "Please check the form");
       return;
     }
 
+    setLoading(true);
     const result = await registerAction(formData);
 
     if (!result.ok) {
@@ -45,96 +67,108 @@ export default function RegisterComponent() {
     }
 
     toastSuccess("Account created", "Check your email for a verification code.");
-    // Pass email to OTP page via query param
-    router.push(`/verify-otp?email=${encodeURIComponent(result.data.email)}`);
+    setEmail(result.data.email);
+    setSuccess(true); // triggers the split-open exit animation
+
+    setTimeout(() => {
+      router.push(`/verify-otp?email=${encodeURIComponent(result.data.email)}`);
+    }, AUTH_EXIT_DURATION * 1000);
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="w-full max-w-sm bg-white rounded-2xl shadow p-8 space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Create account</h1>
-          <p className="text-sm text-gray-500 mt-1">We'll send a verification code to your email.</p>
-        </div>
+    <div className="relative min-h-screen overflow-hidden flex flex-col md:flex-row bg-background">
+      <AuthBrandPanel exiting={success} />
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Full name</label>
-            <input
-              name="name"
-              type="text"
-              required
-              placeholder="John Doe"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
+      {/* ─── Right panel: form ──────────────────────────────────────────── */}
+      <motion.div
+        animate={success ? { x: "100%" } : { x: 0 }}
+        transition={{ duration: AUTH_EXIT_DURATION, ease: [0.76, 0, 0.24, 1] }}
+        className="relative flex flex-1 items-center justify-center bg-background px-6 py-16"
+      >
+        <div className="w-full max-w-sm space-y-6">
+          <AuthMobileBrand />
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-            <input
-              name="email"
-              type="email"
-              required
-              placeholder="john@example.com"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Phone (optional)</label>
-            <input
-              name="phone"
-              type="tel"
-              placeholder="+855 12 345 678"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-            <input
-              name="password"
-              type="password"
-              required
-              minLength={6}
-              placeholder="Min. 6 characters"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Confirm password</label>
-            <input
-              name="confirmPassword"
-              type="password"
-              required
-              placeholder="Same as above"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
-          {error && (
-            <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">
-              {error}
+            <h2 className="text-2xl font-bold tracking-tight">Create account</h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              We&apos;ll send a verification code to your email.
             </p>
-          )}
+          </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-blue-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition"
+          <form onSubmit={handleSubmit} noValidate className="space-y-4">
+            <Field label="Full name" name="name" type="text" placeholder="John Doe" error={fieldErrors.name} />
+            <Field label="Email" name="email" type="email" placeholder="john@example.com" error={fieldErrors.email} />
+            <Field label="Phone (optional)" name="phone" type="tel" placeholder="+855 12 345 678" error={fieldErrors.phone} />
+            <Field label="Password" name="password" type="password" placeholder="Min. 6 characters" error={fieldErrors.password} />
+            <Field label="Confirm password" name="confirmPassword" type="password" placeholder="Same as above" error={fieldErrors.confirmPassword} />
+
+            {error && (
+              <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">
+                {error}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading || success}
+              className="w-full text-white rounded-lg py-2 text-sm font-medium transition disabled:opacity-60"
+              style={{ backgroundColor: AUTH_BRAND }}
+            >
+              {success ? "Account created!" : loading ? "Creating account…" : "Register"}
+            </button>
+          </form>
+
+          <p className="text-center text-sm text-muted-foreground">
+            Already have an account?{" "}
+            <Link href="/login" className="hover:underline" style={{ color: AUTH_BRAND }}>
+              Sign in
+            </Link>
+          </p>
+        </div>
+      </motion.div>
+
+      {/* ─── Success moment, fades in as the panels slide apart ──────────── */}
+      {success && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.4, delay: 0.15 }}
+          className="pointer-events-none fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 text-center px-6"
+        >
+          <div
+            className="flex size-14 items-center justify-center rounded-full text-white shadow-lg"
+            style={{ backgroundColor: AUTH_BRAND }}
           >
-            {loading ? "Creating account…" : "Register"}
-          </button>
-        </form>
+            <MailCheckIcon className="size-7" />
+          </div>
+          <p className="font-medium">Check your email</p>
+          <p className="text-sm text-muted-foreground max-w-xs">
+            We sent a verification code to {email}
+          </p>
+        </motion.div>
+      )}
+    </div>
+  );
+}
 
-        <p className="text-center text-sm text-gray-500">
-          Already have an account?{" "}
-          <Link href="/login" className="text-blue-600 hover:underline">
-            Sign in
-          </Link>
-        </p>
-      </div>
+// ─── Small labeled input with inline zod error ───────────────────────────────
+
+function Field({
+  label, name, type, placeholder, error,
+}: {
+  label: string; name: string; type: string; placeholder: string; error?: string;
+}) {
+  return (
+    <div>
+      <label className="block text-sm font-medium mb-1">{label}</label>
+      <input
+        name={name}
+        type={type}
+        placeholder={placeholder}
+        className={`${authInputClass} ${error ? "border-red-400" : ""}`}
+        style={authInputRingStyle}
+      />
+      {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
     </div>
   );
 }

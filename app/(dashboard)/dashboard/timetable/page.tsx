@@ -1,19 +1,26 @@
-import { redirect } from "next/navigation"
 import { requireUser } from "@/lib/server-auth"
-import { getCoursesAction } from "@/actions/course.action"
-import { CourseManager } from "@/components/courses/course-manager"
+import { getTimetableForRoleAction } from "@/actions/timetable.action"
+import { getMyGroupsAction } from "@/actions/group.action"
+import { getZonesAction } from "@/actions/zone.action"
+import { TimetableManager } from "@/components/timetable/timetable-manager"
 import { AppSidebar } from "@/components/app-sidebar"
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb"
 import { Separator } from "@/components/ui/separator"
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { NotificationBell } from "@/components/notifications/notification-bell"
 
-export default async function CoursesPage() {
-  const user = await requireUser()
-  if (user.role !== "ADMIN") redirect("/dashboard")
+export default async function TimetablePage() {
+  await requireUser()
 
-  const result = await getCoursesAction()
-  const courses = result.ok ? result.data : []
+  const [slotsResult, groupsResult, zonesResult] = await Promise.all([
+    getTimetableForRoleAction(),
+    getMyGroupsAction(),
+    getZonesAction(),
+  ])
+
+  const slots = slotsResult.ok ? slotsResult.data : []
+  const groups = groupsResult.ok ? groupsResult.data : []
+  const zones = zonesResult.ok ? zonesResult.data : []
 
   return (
     <SidebarProvider>
@@ -26,7 +33,7 @@ export default async function CoursesPage() {
             <BreadcrumbList>
               <BreadcrumbItem><BreadcrumbLink href="/dashboard">Dashboard</BreadcrumbLink></BreadcrumbItem>
               <BreadcrumbSeparator />
-              <BreadcrumbItem><BreadcrumbPage>Courses</BreadcrumbPage></BreadcrumbItem>
+              <BreadcrumbItem><BreadcrumbPage>Timetable</BreadcrumbPage></BreadcrumbItem>
             </BreadcrumbList>
           </Breadcrumb>
         <div className="ml-auto flex items-center gap-1">
@@ -35,12 +42,12 @@ export default async function CoursesPage() {
         </header>
 
         <main className="flex flex-1 flex-col gap-4 p-6 bg-muted/20">
-          {!result.ok ? (
+          {!slotsResult.ok ? (
             <div className="rounded-2xl border bg-card p-8 text-center text-sm text-rose-600">
-              Couldn't load courses: {result.error}
+              Couldn't load timetable: {slotsResult.error}
             </div>
           ) : (
-            <CourseManager initialCourses={courses} />
+            <TimetableManager initialSlots={slots} groups={groups} zones={zones} />
           )}
         </main>
       </SidebarInset>

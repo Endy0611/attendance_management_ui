@@ -26,9 +26,7 @@ async function request<T>(
       Authorization: `Bearer ${token}`,
       ...options.headers,
     },
-    next: {
-      tags: ["sessions"],
-    },
+    cache: "no-store",
   });
 
   if (res.status === 204) {

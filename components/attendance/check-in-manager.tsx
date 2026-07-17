@@ -86,7 +86,7 @@ interface CheckInManagerProps {
 }
 
 export function CheckInManager({ initialSessions, initialDevice, initialFaceStatus }: CheckInManagerProps) {
-  const [now, setNow] = useState(() => Date.now())
+  const [now, setNow] = useState<number | null>(null)
 
   const [sessions] = useState(initialSessions)
   const [sessionId, setSessionId] = useState(initialSessions.length === 1 ? initialSessions[0].id : "")
@@ -101,7 +101,7 @@ export function CheckInManager({ initialSessions, initialDevice, initialFaceStat
   const [locError, setLocError] = useState("")
 
   const [faceStatus] = useState(initialFaceStatus)
-
+  
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [streaming, setStreaming] = useState(false)
@@ -122,9 +122,10 @@ export function CheckInManager({ initialSessions, initialDevice, initialFaceStat
 
   // tick every second for the countdown
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 1000)
-    return () => clearInterval(t)
-  }, [])
+  setNow(Date.now())
+  const t = setInterval(() => setNow(Date.now()), 1000)
+  return () => clearInterval(t)
+}, [])
 
   // device fingerprint + geolocation are client-only
   useEffect(() => {
@@ -325,7 +326,7 @@ export function CheckInManager({ initialSessions, initialDevice, initialFaceStat
               style={{ backgroundColor: `${NAVY}14`, color: NAVY }}
             >
               <ClockIcon className="size-3.5" />
-              {formatCountdown(new Date(selected.endTime).getTime() - now)}
+{now === null ? "--:--" : formatCountdown(new Date(selected.endTime).getTime() - now)}
             </div>
           </div>
         )}
@@ -420,10 +421,10 @@ export function CheckInManager({ initialSessions, initialDevice, initialFaceStat
         ) : (
           <>
             <div className="relative rounded-xl overflow-hidden aspect-[4/3] bg-muted flex items-center justify-center">
-              <video ref={videoRef} className={`w-full h-full object-cover ${streaming ? "" : "hidden"}`} playsInline muted />
+              <video ref={videoRef} className={`w-full h-full object-cover -scale-x-100 ${streaming ? "" : "hidden"}`} playsInline muted />
               <canvas ref={canvasRef} className="hidden" />
               {captured ? (
-                <img src={captured} alt="Captured face" className="w-full h-full object-cover animate-in fade-in zoom-in-95 duration-300" />
+                <img src={captured} alt="Captured face" className="w-full h-full object-cover -scale-x-100 animate-in fade-in zoom-in-95 duration-300" />
               ) : streaming ? (
                 <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                   <div className="size-40 rounded-full border-2 border-dashed border-white/70" />
