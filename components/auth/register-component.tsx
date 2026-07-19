@@ -11,7 +11,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
@@ -26,6 +26,13 @@ import {
 
 export default function RegisterComponent() {
   const router = useRouter();
+  useEffect(() => {
+  const pendingEmail = localStorage.getItem("pendingVerification");
+
+  if (!pendingEmail) return;
+
+  router.replace("/verify-otp");
+}, [router]);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
@@ -67,12 +74,23 @@ export default function RegisterComponent() {
     }
 
     toastSuccess("Account created", "Check your email for a verification code.");
-    setEmail(result.data.email);
-    setSuccess(true); // triggers the split-open exit animation
 
-    setTimeout(() => {
-      router.push(`/verify-otp?email=${encodeURIComponent(result.data.email)}`);
-    }, AUTH_EXIT_DURATION * 1000);
+setEmail(result.data.email);
+
+// Save pending verification email
+localStorage.setItem(
+  "pendingVerification",
+  JSON.stringify({
+    email: result.data.email,
+    createdAt: Date.now(),
+  })
+);
+
+setSuccess(true);
+
+setTimeout(() => {
+  router.replace("/verify-otp");
+}, AUTH_EXIT_DURATION * 1000);
   }
 
   return (

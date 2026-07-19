@@ -24,6 +24,8 @@ export default function LoginComponent() {
   const [success, setSuccess] = useState(false);
   const [name, setName] = useState("");
 
+  
+
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError("");
