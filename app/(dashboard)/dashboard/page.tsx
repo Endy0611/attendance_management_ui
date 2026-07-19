@@ -12,6 +12,7 @@ import { NotificationBell } from "@/components/notifications/notification-bell"
 import { useAuthStore } from "@/store/auth.store"
 import { adminApi, courseApi, groupApi, sessionApi, attendanceApi } from "@/lib/api"
 import type { AppUser, Course, Group, Session, StudentAttendance } from "@/lib/api"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   UsersIcon, BookOpenIcon, LayersIcon, CalendarIcon,
   CheckCircleIcon, XCircleIcon, ClockIcon, ActivityIcon,
@@ -44,6 +45,13 @@ function greeting() {
   if (h < 12) return "Good morning"
   if (h < 18) return "Good afternoon"
   return "Good evening"
+}
+
+// Resolves a raw avatar value (storage key or full URL) to a displayable src.
+function getDisplayAvatar(avatarValue?: string): string | undefined {
+  if (!avatarValue || avatarValue.trim() === "") return undefined
+  if (avatarValue.startsWith("http://") || avatarValue.startsWith("https://")) return avatarValue
+  return `${process.env.NEXT_PUBLIC_API_URL}/files/preview-file?key=${avatarValue}`
 }
 
 // ── Data helpers ───────────────────────────────────────────────────────────────
@@ -504,40 +512,30 @@ function CircularGauge({ value, color, size = 128, label, sublabel }: {
   )
 }
 
-// Activity heatmap grid — inspired by the "Top Products" weekly grid
-function ActivityHeatmap({ rows, days, color }: {
-  rows: { label: string; counts: number[] }[]; days: string[]; color: string
+// Group activity card — replaces the old dense heatmap grid with a scannable
+// per-group card: name, this-week total, trend, and a mini trajectory line.
+function GroupActivityCard({ label, courseCode, counts, color, delay = 0 }: {
+  label: string; courseCode?: string; counts: number[]; color: string; delay?: number
 }) {
-  const max = Math.max(1, ...rows.flatMap(r => r.counts))
+  const total = counts.reduce((a, b) => a + b, 0)
+  const trend = trendFromBuckets(counts.map(v => ({ value: v })))
+  const safeCounts = counts.some(v => v > 0) ? counts : counts.map(() => 0.0001)
+
   return (
-    <div className="overflow-x-auto">
-      <div className="grid gap-1.5" style={{ gridTemplateColumns: `minmax(72px,auto) repeat(${days.length}, minmax(28px,1fr))` }}>
-        <div />
-        {days.map(d => (
-          <div key={d} className="text-center text-[10px] text-muted-foreground font-[family-name:var(--font-mono)]">{d}</div>
-        ))}
-        {rows.map((row, rowIndex) => (
-          <div key={row.label} className="contents">
-            <div className="text-xs font-medium truncate pr-2 flex items-center">{row.label}</div>
-            {row.counts.map((v, i) => {
-              const intensity = v === 0 ? 0.06 : 0.18 + (v / max) * 0.82
-              return (
-                <div
-                  key={i}
-                  title={`${row.label} · ${days[i]}: ${v}`}
-                  className="aspect-square rounded-md animate-scale-in transition-transform duration-200 hover:scale-125"
-                  style={{
-                    backgroundColor: color,
-                    opacity: intensity,
-                    animationDelay: `${(rowIndex * days.length + i) * 18}ms`,
-                    animationFillMode: "backwards",
-                  }}
-                />
-              )
-            })}
-          </div>
-        ))}
+    <div
+      className="group rounded-xl border p-4 hover:bg-muted/30 hover:-translate-y-0.5 transition-all duration-200 animate-fade-up"
+      style={{ animationDelay: `${delay}ms` }}
+    >
+      <div className="flex items-start justify-between gap-2 mb-3">
+        <div className="min-w-0">
+          <p className="font-medium text-sm truncate">{label}</p>
+          <p className="text-xs text-muted-foreground truncate">
+            {courseCode ?? "—"} · {total} check-in{total === 1 ? "" : "s"} this week
+          </p>
+        </div>
+        <TrendBadge value={trend} />
       </div>
+      <Sparkline data={safeCounts} color={color} width={220} height={40} />
     </div>
   )
 }
@@ -593,13 +591,13 @@ function AdminDashboard() {
 
   const heatmapRows = useMemo(() => {
     const days = chartData.map(d => d.label)
-    return groups.slice(0, 5).map(g => {
+    return groups.slice(0, 6).map(g => {
       const counts = chartData.map((_, i) => {
         const now = new Date()
         const target = new Date(now); target.setDate(now.getDate() - (chartData.length - 1 - i))
         return sessions.filter(s => s.groupName === g.name && new Date(s.startTime).toDateString() === target.toDateString()).length
       })
-      return { label: g.name, counts }
+      return { label: g.name, courseCode: g.courseCode, counts }
     })
   }, [groups, sessions, chartData])
 
@@ -664,7 +662,11 @@ function AdminDashboard() {
           {heatmapRows.length === 0 ? (
             <EmptyState icon={<LayersIcon className="size-4" />} message="No group activity yet — it'll show up here once sessions start." accent={ACCENT.navy} />
           ) : (
-            <ActivityHeatmap rows={heatmapRows} days={chartData.map(d => d.label)} color={ACCENT.navy} />
+            <div className="grid gap-3 sm:grid-cols-2">
+              {heatmapRows.map((r, i) => (
+                <GroupActivityCard key={r.label} label={r.label} courseCode={r.courseCode} counts={r.counts} color={ACCENT.navy} delay={i * 60} />
+              ))}
+            </div>
           )}
         </div>
 
@@ -696,12 +698,20 @@ function AdminDashboard() {
           <SectionLabel color={ACCENT.navy}>People</SectionLabel>
           <h2 className="font-semibold mb-4 font-[family-name:var(--font-display)]">Recent Users</h2>
           <div className="space-y-3">
-            {users.slice(0, 6).map((u, i) => (
+            {[...users]
+  .sort((a, b) => new Date((b as any).createdAt ?? 0).getTime() - new Date((a as any).createdAt ?? 0).getTime())
+  .slice(0, 6)
+  .map((u, i) => (
               <div key={u.id} className="flex items-center gap-3 animate-fade-up transition-transform duration-200 hover:translate-x-1" style={{ animationDelay: `${700 + i * 50}ms` }}>
-                <div className="size-9 rounded-full flex items-center justify-center text-xs font-semibold shrink-0"
-                  style={{ backgroundColor: `${ACCENT.navy}1A`, color: ACCENT.navy }}>
-                  {u.name?.slice(0, 2).toUpperCase()}
-                </div>
+                <Avatar className="size-9 shrink-0">
+                  <AvatarImage src={getDisplayAvatar((u as unknown as { avatar?: string }).avatar)} alt={u.name ?? ""} />
+                  <AvatarFallback
+                    className="text-xs font-semibold"
+                    style={{ backgroundColor: `${ACCENT.navy}1A`, color: ACCENT.navy }}
+                  >
+                    {u.name?.slice(0, 2).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
                 <div className="min-w-0 flex-1">
                   <p className="font-medium text-sm truncate">{u.name}</p>
                   <p className="text-muted-foreground text-xs truncate">{u.email}</p>
