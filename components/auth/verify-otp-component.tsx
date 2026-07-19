@@ -8,7 +8,7 @@
  * 1. User enters 6-digit OTP from their email (validated with the shared otpSchema)
  * 2. verifyOtpAction is called
  * 3. On success → panels slide apart, then redirect to /login with a success hint
- * 4. "Resend" button calls resendOtpAction
+ * 4. "Resend" button calls resendOtpAction (60s cooldown to match backend rate limit)
  */
 
 "use client";
@@ -26,6 +26,8 @@ import {
   AuthBrandPanel, AuthMobileBrand, AUTH_BRAND, AUTH_EXIT_DURATION,
   authInputClass, authInputRingStyle,
 } from "@/components/auth/auth-brand-panel";
+
+const RESEND_COOLDOWN_SECONDS = 60;
 
 export default function VerifyOtpComponent() {
   const router = useRouter();
@@ -46,6 +48,16 @@ export default function VerifyOtpComponent() {
   const [info, setInfo] = useState("");
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+
+  const [resendLoading, setResendLoading] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
+
+  // countdown ticker for the resend cooldown
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = setInterval(() => setCooldown((c) => Math.max(0, c - 1)), 1000);
+    return () => clearInterval(timer);
+  }, [cooldown]);
 
   async function handleVerify(e: React.FormEvent) {
     e.preventDefault();
@@ -77,17 +89,28 @@ export default function VerifyOtpComponent() {
   }
 
   async function handleResend() {
+    if (resendLoading || cooldown > 0) return; // guard against double-clicks / spam
+
     setError("");
-    setInfo("Sending…");
+    setInfo("");
+    setResendLoading(true);
 
     const result = await resendOtpAction(email);
-    setInfo(result.ok ? "A new code was sent to your email." : "");
+
     if (!result.ok) {
       setError(result.error);
       toastError(result.error);
     } else {
+      setInfo("A new code was sent to your email.");
       toastSuccess("Code resent", "Check your email.");
+      setCooldown(RESEND_COOLDOWN_SECONDS); // matches backend @RateLimited window
     }
+    setResendLoading(false);
+  }
+
+  function handleUseDifferentEmail() {
+    clearPendingVerification();
+    router.push("/register");
   }
 
   return (
@@ -149,17 +172,34 @@ export default function VerifyOtpComponent() {
 
           <button
             onClick={handleResend}
-            className="w-full text-sm hover:underline"
+            disabled={resendLoading || cooldown > 0}
+            className="w-full text-sm hover:underline disabled:opacity-50 disabled:hover:no-underline"
             style={{ color: AUTH_BRAND }}
           >
-            Resend code
+            {resendLoading
+              ? "Sending…"
+              : cooldown > 0
+                ? `Resend code (${cooldown}s)`
+                : "Resend code"}
           </button>
 
-          <p className="text-center text-sm text-muted-foreground">
-            <Link href="/login" className="hover:underline" style={{ color: AUTH_BRAND }}>
-              Back to login
-            </Link>
-          </p>
+          <div className="text-center space-y-2 text-sm text-muted-foreground">
+            <p>
+              <Link href="/login" className="hover:underline" style={{ color: AUTH_BRAND }}>
+                Back to login
+              </Link>
+            </p>
+            <p>
+              Wrong email?{" "}
+              <button
+                onClick={handleUseDifferentEmail}
+                className="hover:underline"
+                style={{ color: AUTH_BRAND }}
+              >
+                Use a different email
+              </button>
+            </p>
+          </div>
         </div>
       </motion.div>
 

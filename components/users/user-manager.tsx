@@ -9,6 +9,7 @@ import { faceApi } from "@/lib/api"
 import { toastSuccess, toastError } from "@/lib/toast"
 import type { AppUserResponse } from "@/types/auth-types"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { DropdownPortal, useDropdownPosition } from "@/components/ui/dropdown-portal"
 import {
   PlusIcon, PencilIcon, TrashIcon, ShieldOffIcon, ShieldCheckIcon,
   KeyRoundIcon, SmartphoneIcon, ScanFaceIcon, SearchIcon, LoaderIcon,
@@ -247,45 +248,92 @@ function RowActions({
   onDelete: () => void
 }) {
   const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const position = useDropdownPosition(open, triggerRef, 208)
 
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener("mousedown", handleClick)
-    return () => document.removeEventListener("mousedown", handleClick)
-  }, [])
+  const style = ROLE_STYLES[user.role as Role]
 
-  const items: { label: string; icon: React.ReactNode; onClick: () => void; danger?: boolean }[] = [
+  const primaryItems = [
     { label: "Edit", icon: <PencilIcon className="size-4" />, onClick: onEdit },
     { label: user.active ? "Ban user" : "Unban user", icon: user.active ? <ShieldOffIcon className="size-4" /> : <ShieldCheckIcon className="size-4" />, onClick: onToggleActive },
+  ]
+  const secondaryItems = [
     { label: "Reset password", icon: <KeyRoundIcon className="size-4" />, onClick: onResetPassword },
     { label: "Reset device", icon: <SmartphoneIcon className="size-4" />, onClick: onResetDevice },
     { label: "Reset face data", icon: <ScanFaceIcon className="size-4" />, onClick: onResetFace },
-    { label: "Delete", icon: <TrashIcon className="size-4" />, onClick: onDelete, danger: true },
   ]
 
+  function itemClick(fn: () => void) {
+    setOpen(false)
+    fn()
+  }
+
   return (
-    <div className="relative" ref={ref}>
-      <button onClick={() => setOpen(v => !v)} className={ICON_BTN}>
+    <>
+      <button
+        ref={triggerRef}
+        onClick={() => setOpen(v => !v)}
+        aria-label={`Actions for ${user.name}`}
+        aria-expanded={open}
+        className={`${ICON_BTN} ${open ? "bg-muted text-foreground" : ""}`}
+      >
         <MoreVerticalIcon className="size-4" />
       </button>
-      {open && (
-        <div className="absolute right-0 top-full mt-1 z-20 w-48 rounded-xl bg-card shadow-xl ring-1 ring-black/10 py-1 animate-in fade-in zoom-in-95 duration-100">
-          {items.map(item => (
+
+      <DropdownPortal open={open} onClose={() => setOpen(false)} position={position}>
+        {/* User context header — so it's unambiguous whose menu this is,
+            especially once it's floating free of the row via the portal. */}
+        {/* User context header */}
+<div className="flex items-center gap-2.5 px-3 pb-2 mb-1 border-b border-border">
+  <Avatar className="size-7 shrink-0">
+    <AvatarImage src={getDisplayAvatar(user.avatar)} alt={user.name} />
+    <AvatarFallback className={`text-[11px] font-semibold text-white ${style.avatar}`}>
+      {initials(user.name)}
+    </AvatarFallback>
+  </Avatar>
+  <div className="min-w-0">
+    <p className="text-sm font-medium truncate leading-tight">{user.name}</p>
+    <p className="text-xs text-muted-foreground truncate leading-tight">{user.email}</p>
+  </div>
+</div>
+
+        <div className="py-0.5">
+          {primaryItems.map(item => (
             <button
               key={item.label}
-              onClick={() => { setOpen(false); item.onClick() }}
-              className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm text-left hover:bg-muted/70 transition-colors ${item.danger ? "text-red-600 dark:text-red-400" : ""}`}
+              onClick={() => itemClick(item.onClick)}
+              className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-left text-foreground hover:bg-muted/70 transition-colors"
             >
               {item.icon}
               {item.label}
             </button>
           ))}
         </div>
-      )}
-    </div>
+
+        <div className="py-0.5 border-t border-border">
+          {secondaryItems.map(item => (
+            <button
+              key={item.label}
+              onClick={() => itemClick(item.onClick)}
+              className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-left text-muted-foreground hover:bg-muted/70 hover:text-foreground transition-colors"
+            >
+              {item.icon}
+              {item.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="py-0.5 border-t border-border">
+          <button
+            onClick={() => itemClick(onDelete)}
+            className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-left text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors"
+          >
+            <TrashIcon className="size-4" />
+            Delete
+          </button>
+        </div>
+      </DropdownPortal>
+    </>
   )
 }
 

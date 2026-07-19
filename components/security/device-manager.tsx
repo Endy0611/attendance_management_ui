@@ -6,7 +6,7 @@ import { generateDeviceFingerprint } from "@/lib/device-fingerprint"
 import { toastSuccess, toastError } from "@/lib/toast"
 import { Button } from "@/components/ui/button"
 import type { DeviceResponse } from "@/types/device-types"
-import { SmartphoneIcon, CheckCircleIcon, LoaderIcon, ShieldCheckIcon } from "lucide-react"
+import { SmartphoneIcon, CheckCircleIcon, LoaderIcon, ShieldCheckIcon, FingerprintIcon } from "lucide-react"
 
 const NAVY = "#1C4D8D"
 
@@ -16,9 +16,6 @@ export function DeviceManager({ initialDevice }: { initialDevice: DeviceResponse
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
 
-  // Computed client-side only, after hydration — matching this on the server
-  // pass would be meaningless (no navigator/screen there), so it starts blank
-  // and fills in via effect, same as the old page did.
   const [fp, setFp] = useState("")
   const [userAgent, setUserAgent] = useState("")
   useEffect(() => {
@@ -50,40 +47,62 @@ export function DeviceManager({ initialDevice }: { initialDevice: DeviceResponse
         Contact your admin to reset your device if you change phones.
       </p>
 
+      {/* Status card */}
       {device ? (
-        <div className="rounded-xl border bg-emerald-50 dark:bg-emerald-950 border-emerald-200 p-5 space-y-3">
+        <div className="rounded-2xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950 p-5 space-y-4">
           <div className="flex items-center gap-3">
-            <ShieldCheckIcon className="size-6 text-emerald-600" />
+            <div className="size-11 rounded-xl bg-emerald-100 dark:bg-emerald-900 flex items-center justify-center shrink-0">
+              <ShieldCheckIcon className="size-5 text-emerald-600 dark:text-emerald-400" />
+            </div>
             <div>
-              <p className="font-semibold text-emerald-800 dark:text-emerald-300">Device Bound</p>
-              <p className="text-xs text-emerald-700 dark:text-emerald-400">
-                Bound on {new Date(device.createdAt).toLocaleDateString()}
+              <p className="font-semibold text-sm text-emerald-800 dark:text-emerald-300">Device bound</p>
+              <p className="text-xs text-emerald-700 dark:text-emerald-400 mt-0.5">
+                Secured on {new Date(device.createdAt).toLocaleDateString()}
               </p>
             </div>
           </div>
-          <div className="text-xs text-muted-foreground bg-white/50 dark:bg-black/20 rounded-lg p-3 break-all">
-            <p className="font-medium mb-1">Device Info</p>
-            <p>{device.deviceInfo}</p>
+          <div className="rounded-xl bg-white/60 dark:bg-black/20 border border-emerald-200/60 dark:border-emerald-900/60 p-3">
+            <p className="text-[11px] font-medium text-emerald-700 dark:text-emerald-400 uppercase tracking-wide mb-1">
+              Registered device
+            </p>
+            <p className="text-xs text-muted-foreground break-all leading-relaxed">{device.deviceInfo}</p>
           </div>
         </div>
       ) : (
-        <div className="rounded-xl border bg-amber-50 dark:bg-amber-950 border-amber-200 p-5 flex items-center gap-3">
-          <SmartphoneIcon className="size-6 text-amber-600" />
-          <div>
-            <p className="font-semibold text-amber-800 dark:text-amber-300">No Device Bound</p>
-            <p className="text-xs text-amber-700 dark:text-amber-400">You need to bind this device to check in.</p>
+        <div className="rounded-2xl border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950 p-5">
+          <div className="flex items-center gap-3">
+            <div className="size-11 rounded-xl bg-amber-100 dark:bg-amber-900 flex items-center justify-center shrink-0">
+              <SmartphoneIcon className="size-5 text-amber-600 dark:text-amber-400" />
+            </div>
+            <div>
+              <p className="font-semibold text-sm text-amber-800 dark:text-amber-300">No device bound</p>
+              <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+                Bind this device before you can check in.
+              </p>
+            </div>
           </div>
         </div>
       )}
 
-      <div className="rounded-xl border bg-card p-4 text-sm space-y-2">
-        <p className="font-medium flex items-center gap-2">
-          <SmartphoneIcon className="size-4" /> This Device
-        </p>
-        <p className="text-xs text-muted-foreground break-all">{userAgent}</p>
-        <p className="text-xs text-muted-foreground">
-          Fingerprint: <code className="bg-muted px-1 rounded">{fp}</code>
-        </p>
+      {/* This device — fingerprint card, echoes the scanner's "identity" feel */}
+      <div className="rounded-2xl border bg-card p-4 space-y-3">
+        <div className="flex items-center gap-2.5">
+          <div className="size-8 rounded-lg bg-muted flex items-center justify-center shrink-0" style={{ color: NAVY }}>
+            <SmartphoneIcon className="size-4" />
+          </div>
+          <p className="font-medium text-sm">This device</p>
+        </div>
+
+        <div className="space-y-2 pl-[42px]">
+          <p className="text-xs text-muted-foreground break-all leading-relaxed">{userAgent || "Detecting…"}</p>
+
+          <div className="flex items-center gap-2 pt-1">
+            <FingerprintIcon className="size-3.5 text-muted-foreground shrink-0" />
+            <code className="text-xs bg-muted px-2 py-1 rounded-md font-mono text-muted-foreground truncate">
+              {fp || "Generating fingerprint…"}
+            </code>
+          </div>
+        </div>
       </div>
 
       {error && <p className="text-sm text-rose-600 bg-rose-50 dark:bg-rose-950 rounded-lg px-3 py-2">{error}</p>}
@@ -92,7 +111,7 @@ export function DeviceManager({ initialDevice }: { initialDevice: DeviceResponse
       {!device && (
         <Button onClick={bindDevice} disabled={binding || !fp} className="w-full h-11" style={{ backgroundColor: NAVY }}>
           {binding ? <LoaderIcon className="size-4 animate-spin" /> : <CheckCircleIcon className="size-4" />}
-          {binding ? "Binding…" : "Bind This Device"}
+          {binding ? "Binding…" : "Bind this device"}
         </Button>
       )}
     </div>
