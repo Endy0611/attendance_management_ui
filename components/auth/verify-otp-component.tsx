@@ -13,14 +13,15 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter} from "next/navigation";
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { MailCheckIcon } from "lucide-react";
 import { verifyOtpAction, resendOtpAction } from "@/actions/auth.action";
 import { toastSuccess, toastError } from "@/lib/toast";
 import { otpSchema, fieldErrorsOf } from "@/schemas/auth.schema";
+import { setPendingVerification, getPendingVerification, clearPendingVerification } from "@/lib/pending-verification";
 import {
   AuthBrandPanel, AuthMobileBrand, AUTH_BRAND, AUTH_EXIT_DURATION,
   authInputClass, authInputRingStyle,
@@ -28,27 +29,24 @@ import {
 
 export default function VerifyOtpComponent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
-  const [email, setEmail] = useState("");
-const [otp, setOtp] = useState("");
+  // Get email from URL, fall back to whatever was stashed on register
+  const emailFromUrl = searchParams.get("email");
+  const email = emailFromUrl ?? getPendingVerification() ?? "";
+
+  // keep localStorage in sync (covers the case where only the URL has it)
+  useEffect(() => {
+    if (email) setPendingVerification(email);
+  }, [email]);
+
+  const [otp, setOtp] = useState("");
   const [error, setError] = useState("");
   const [otpError, setOtpError] = useState("");
   const [info, setInfo] = useState("");
   const [loading, setLoading] = useState(false);
-const [success, setSuccess] = useState(false);
+  const [success, setSuccess] = useState(false);
 
- useEffect(() => {
-   const pending = localStorage.getItem("pendingVerification");
-
-   if (!pending) {
-     router.replace("/register");
-     return;
-   }
-
-   const { email } = JSON.parse(pending);
-
-   setEmail(email);
- }, [router]);
   async function handleVerify(e: React.FormEvent) {
     e.preventDefault();
     setError("");
@@ -73,27 +71,16 @@ const [success, setSuccess] = useState(false);
     }
 
     toastSuccess("Email verified", "You can now sign in.");
-
-// Remove pending verification email
-localStorage.removeItem("pendingVerification");
-
-setSuccess(true);
-
-setTimeout(() => {
-  router.push("/login?verified=1");
-}, AUTH_EXIT_DURATION * 1000);
+    clearPendingVerification();
+    setSuccess(true); // triggers the split-open exit animation
+    setTimeout(() => router.push("/login?verified=1"), AUTH_EXIT_DURATION * 1000);
   }
 
   async function handleResend() {
     setError("");
     setInfo("Sending…");
 
-    if (!email) {
-  toastError("Email not found.");
-  return;
-}
-
-const result = await resendOtpAction(email);
+    const result = await resendOtpAction(email);
     setInfo(result.ok ? "A new code was sent to your email." : "");
     if (!result.ok) {
       setError(result.error);
@@ -103,15 +90,7 @@ const result = await resendOtpAction(email);
     }
   }
 
-  if (!email) {
   return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
-    </div>
-  );
-}
-
-return (
     <div className="relative min-h-screen overflow-hidden flex flex-col md:flex-row bg-background">
       <AuthBrandPanel exiting={success} tagline="One more step — verify your email to activate your account." />
 
@@ -177,14 +156,9 @@ return (
           </button>
 
           <p className="text-center text-sm text-muted-foreground">
-            <button
-  type="button"
-  onClick={() => toastError("Please verify your email first.")}
-  className="hover:underline"
-  style={{ color: AUTH_BRAND }}
->
-  Back to login
-</button>
+            <Link href="/login" className="hover:underline" style={{ color: AUTH_BRAND }}>
+              Back to login
+            </Link>
           </p>
         </div>
       </motion.div>

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Sora, Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import Providers from "./provider";
+import { PendingVerificationGuard } from "@/components/auth/pending-verification-guard";
 
 const sora = Sora({
   variable: "--font-display",
@@ -32,6 +33,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       className={`${sora.variable} ${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col font-[family-name:var(--font-body)]">
+        <PendingVerificationGuard />
         <Providers>{children}</Providers>
       </body>
     </html>
