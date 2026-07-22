@@ -1,43 +1,34 @@
-/**
- * verify-otp-component.tsx
- *
- * Used after register → verify email.
- * The email comes from the URL: /verify-otp?email=john@gmail.com
- *
- * Flow:
- * 1. User enters 6-digit OTP from their email (validated with the shared otpSchema)
- * 2. verifyOtpAction is called
- * 3. On success → panels slide apart, then redirect to /login with a success hint
- * 4. "Resend" button calls resendOtpAction (60s cooldown to match backend rate limit)
- */
-
+// verify-otp-component.tsx
 "use client";
 
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { MailCheckIcon } from "lucide-react";
 import { verifyOtpAction, resendOtpAction } from "@/actions/auth.action";
 import { toastSuccess, toastError } from "@/lib/toast";
 import { otpSchema, fieldErrorsOf } from "@/schemas/auth.schema";
 import { setPendingVerification, getPendingVerification, clearPendingVerification } from "@/lib/pending-verification";
 import {
-  AuthBrandPanel, AuthMobileBrand, AUTH_BRAND, AUTH_EXIT_DURATION,
+  AuthBrandPanel, AuthCard, AuthMobileBrand, AUTH_BRAND, AUTH_BRAND_LIGHT, AUTH_BRAND_DEEP, AUTH_EXIT_DURATION,
   authInputClass, authInputRingStyle,
 } from "@/components/auth/auth-brand-panel";
 
 const RESEND_COOLDOWN_SECONDS = 60;
 
+const fieldVariants = {
+  hidden: { opacity: 0, y: 8 },
+  show: { opacity: 1, y: 0 },
+};
+
 export default function VerifyOtpComponent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // Get email from URL, fall back to whatever was stashed on register
   const emailFromUrl = searchParams.get("email");
   const email = emailFromUrl ?? getPendingVerification() ?? "";
 
-  // keep localStorage in sync (covers the case where only the URL has it)
   useEffect(() => {
     if (email) setPendingVerification(email);
   }, [email]);
@@ -52,7 +43,6 @@ export default function VerifyOtpComponent() {
   const [resendLoading, setResendLoading] = useState(false);
   const [cooldown, setCooldown] = useState(0);
 
-  // countdown ticker for the resend cooldown
   useEffect(() => {
     if (cooldown <= 0) return;
     const timer = setInterval(() => setCooldown((c) => Math.max(0, c - 1)), 1000);
@@ -84,12 +74,12 @@ export default function VerifyOtpComponent() {
 
     toastSuccess("Email verified", "You can now sign in.");
     clearPendingVerification();
-    setSuccess(true); // triggers the split-open exit animation
+    setSuccess(true); // triggers the in-card morph
     setTimeout(() => router.push("/login?verified=1"), AUTH_EXIT_DURATION * 1000);
   }
 
   async function handleResend() {
-    if (resendLoading || cooldown > 0) return; // guard against double-clicks / spam
+    if (resendLoading || cooldown > 0) return;
 
     setError("");
     setInfo("");
@@ -103,7 +93,7 @@ export default function VerifyOtpComponent() {
     } else {
       setInfo("A new code was sent to your email.");
       toastSuccess("Code resent", "Check your email.");
-      setCooldown(RESEND_COOLDOWN_SECONDS); // matches backend @RateLimited window
+      setCooldown(RESEND_COOLDOWN_SECONDS);
     }
     setResendLoading(false);
   }
@@ -114,109 +104,142 @@ export default function VerifyOtpComponent() {
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden flex flex-col md:flex-row bg-background">
-      <AuthBrandPanel exiting={success} tagline="One more step — verify your email to activate your account." />
+    <div className="relative min-h-screen flex items-center justify-center px-4 py-10 sm:py-16">
+      <AuthBrandPanel exiting={success} />
 
-      {/* ─── Right panel: form ──────────────────────────────────────────── */}
-      <motion.div
-        animate={success ? { x: "100%" } : { x: 0 }}
-        transition={{ duration: AUTH_EXIT_DURATION, ease: [0.76, 0, 0.24, 1] }}
-        className="relative flex flex-1 items-center justify-center bg-background px-6 py-16"
-      >
-        <div className="w-full max-w-sm space-y-6">
-          <AuthMobileBrand />
-
-          <div>
-            <h2 className="text-2xl font-bold tracking-tight">Verify your email</h2>
-            <p className="text-sm text-muted-foreground mt-1">
-              Enter the 6-digit code sent to{" "}
-              <span className="font-medium text-foreground">{email}</span>
-            </p>
-          </div>
-
-          <form onSubmit={handleVerify} noValidate className="space-y-4">
-            <div>
-              <input
-                type="text"
-                inputMode="numeric"
-                maxLength={6}
-                value={otp}
-                onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))} // digits only
-                placeholder="123456"
-                className={`${authInputClass} text-center text-2xl tracking-widest ${otpError ? "border-red-400" : ""}`}
-                style={authInputRingStyle}
-              />
-              {otpError && <p className="text-xs text-red-500 mt-1 text-center">{otpError}</p>}
-            </div>
-
-            {error && (
-              <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">
-                {error}
-              </p>
-            )}
-            {info && (
-              <p className="text-sm text-emerald-600 bg-emerald-50 rounded-lg px-3 py-2">
-                {info}
-              </p>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading || success || otp.length !== 6}
-              className="w-full text-white rounded-lg py-2 text-sm font-medium transition disabled:opacity-60"
-              style={{ backgroundColor: AUTH_BRAND }}
+      <AuthCard>
+        <AnimatePresence mode="wait">
+          {!success ? (
+            <motion.div
+              key="form"
+              initial="hidden"
+              animate="show"
+              exit={{ opacity: 0, scale: 0.97 }}
+              variants={{ show: { transition: { staggerChildren: 0.06 } } }}
+              className="space-y-6"
             >
-              {success ? "Verified!" : loading ? "Verifying…" : "Verify"}
-            </button>
-          </form>
+              <motion.div variants={fieldVariants}>
+                <AuthMobileBrand />
+              </motion.div>
 
-          <button
-            onClick={handleResend}
-            disabled={resendLoading || cooldown > 0}
-            className="w-full text-sm hover:underline disabled:opacity-50 disabled:hover:no-underline"
-            style={{ color: AUTH_BRAND }}
-          >
-            {resendLoading
-              ? "Sending…"
-              : cooldown > 0
-                ? `Resend code (${cooldown}s)`
-                : "Resend code"}
-          </button>
+              <motion.div variants={fieldVariants} className="text-center">
+                <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">Verify your email</h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Enter the 6-digit code sent to{" "}
+                  <span className="font-medium text-foreground">{email}</span>
+                </p>
+              </motion.div>
 
-          <div className="text-center space-y-2 text-sm text-muted-foreground">
-            <p>
-              <Link href="/login" className="hover:underline" style={{ color: AUTH_BRAND }}>
-                Back to login
-              </Link>
-            </p>
-            <p>
-              Wrong email?{" "}
-              <button
-                onClick={handleUseDifferentEmail}
-                className="hover:underline"
+              <form onSubmit={handleVerify} noValidate className="space-y-4">
+                <motion.div variants={fieldVariants}>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+                    placeholder="000000"
+                    className={`${authInputClass} text-center text-2xl tracking-[0.4em] font-mono ${otpError ? "border-red-400" : ""}`}
+                    style={authInputRingStyle}
+                  />
+                  {otpError && <p className="text-xs text-red-500 mt-1 text-center">{otpError}</p>}
+                </motion.div>
+
+                <AnimatePresence>
+                  {error && (
+                    <motion.p
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2 overflow-hidden"
+                    >
+                      {error}
+                    </motion.p>
+                  )}
+                  {info && (
+                    <motion.p
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="text-sm text-emerald-600 bg-emerald-50 rounded-lg px-3 py-2 overflow-hidden"
+                    >
+                      {info}
+                    </motion.p>
+                  )}
+                </AnimatePresence>
+
+                <motion.button
+                  variants={fieldVariants}
+                  type="submit"
+                  disabled={loading || otp.length !== 6}
+                  whileTap={{ scale: 0.98 }}
+                  className="relative w-full overflow-hidden rounded-xl py-2.5 sm:py-3 text-sm font-medium text-white shadow-md transition disabled:opacity-70"
+                  style={{ background: `linear-gradient(135deg, ${AUTH_BRAND_LIGHT}, ${AUTH_BRAND_DEEP})` }}
+                >
+                  {loading && (
+                    <motion.span
+                      className="absolute inset-0"
+                      style={{ background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent)" }}
+                      initial={{ x: "-100%" }}
+                      animate={{ x: "100%" }}
+                      transition={{ repeat: Infinity, duration: 1.1, ease: "linear" }}
+                    />
+                  )}
+                  <span className="relative">{loading ? "Verifying…" : "Verify"}</span>
+                </motion.button>
+              </form>
+
+              <motion.button
+                variants={fieldVariants}
+                onClick={handleResend}
+                disabled={resendLoading || cooldown > 0}
+                className="w-full text-sm hover:underline disabled:opacity-50 disabled:hover:no-underline"
                 style={{ color: AUTH_BRAND }}
               >
-                Use a different email
-              </button>
-            </p>
-          </div>
-        </div>
-      </motion.div>
+                {resendLoading ? "Sending…" : cooldown > 0 ? `Resend code (${cooldown}s)` : "Resend code"}
+              </motion.button>
 
-      {/* ─── Success moment ─────────────────────────────────────────────── */}
-      {success && (
-        <motion.div
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.4, delay: 0.15 }}
-          className="pointer-events-none fixed inset-0 z-50 flex flex-col items-center justify-center gap-3"
-        >
-          <div className="flex size-14 items-center justify-center rounded-full text-white shadow-lg" style={{ backgroundColor: AUTH_BRAND }}>
-            <MailCheckIcon className="size-7" />
-          </div>
-          <p className="font-medium">Email verified</p>
-        </motion.div>
-      )}
+              <motion.div variants={fieldVariants} className="text-center space-y-2 text-sm text-muted-foreground">
+                <p>
+                  <Link href="/login" className="hover:underline" style={{ color: AUTH_BRAND }}>
+                    Back to login
+                  </Link>
+                </p>
+                <p>
+                  Wrong email?{" "}
+                  <button onClick={handleUseDifferentEmail} className="hover:underline" style={{ color: AUTH_BRAND }}>
+                    Use a different email
+                  </button>
+                </p>
+              </motion.div>
+            </motion.div>
+          ) : (
+            <motion.div
+              key="success"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="flex flex-col items-center gap-4 py-10 text-center"
+            >
+              <motion.div
+                initial={{ scale: 0.5, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ type: "spring", stiffness: 260, damping: 18, delay: 0.1 }}
+                className="flex size-16 sm:size-20 items-center justify-center rounded-full text-white"
+                style={{
+                  background: `linear-gradient(135deg, ${AUTH_BRAND_LIGHT}, ${AUTH_BRAND_DEEP})`,
+                  boxShadow: `0 0 40px -6px ${AUTH_BRAND}`,
+                }}
+              >
+                <MailCheckIcon className="size-8 sm:size-10" />
+              </motion.div>
+              <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
+                <p className="text-lg font-semibold">Email verified</p>
+                <p className="text-sm text-muted-foreground mt-1">Taking you to sign in…</p>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </AuthCard>
     </div>
   );
 }

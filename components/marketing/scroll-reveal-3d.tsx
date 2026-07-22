@@ -2,13 +2,7 @@
 
 import { motion } from "framer-motion"
 
-export function ScrollReveal3D({
-  children,
-  index = 0,
-}: {
-  children: React.ReactNode
-  index?: number
-}) {
+export function ScrollReveal3D({ children, index = 0 }: { children: React.ReactNode; index?: number }) {
   return (
     <motion.div
       style={{ perspective: 1000 }}
